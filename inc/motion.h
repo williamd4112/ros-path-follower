@@ -5,26 +5,39 @@
 
 #include <vector>
 
-#include <opencv2/core/core.hpp>
-
 #include "config.h"
 
 class motion_detector
 {
 public:
-	motion_detector(int32_t diff_ts=50, int32_t area_ts=50);
+	motion_detector(int32_t diff_ts=50, int32_t area_ts=50, int maxCorners=1000, double qualityLevel=0.01, double minDistance=0.0, int blockSize=3, bool useHarrisDetector=false, double harrisK=0.04, cv::Size winSize=cv::Size(21, 21), int maxLevel=3, int iters=30, bool useInitialFlow=false);
 	~motion_detector();
 
 	int32_t detect(const videoframe_t & frame);
 private:
 	int32_t m_diff_ts;
 	int32_t m_area_ts;
-	cv::Mat m_homography_mat;
-	videoframe_t m_last_frame;	
+	int m_maxCorners;
+	double m_qualityLevel;
+	double m_minDistance;
+	int m_blockSize;
+	bool m_useHarrisDetector;
+	double m_harrisK; 
 
-	void ego_motion_compensate(videoframe_t & src, videoframe_t & dst);	
-	void calculate_points_lk(cv::Mat src, cv::Mat dst, std::vector<cv::Point> & src_points, std::vector<cv::Point> & dst_points);
-	void frame_diff(videoframe_t & frame1, videoframe_t & frame2);
-}
+	cv::Size m_winSize;
+	int m_maxLevel;
+	int m_iters;
+	bool m_useInitialFlow;
+	
+#ifdef GPU
+	cv::Ptr<cv::cuda::CornersDetector> m_feature_detector;
+	cv::Ptr<cv::cuda::SparsePyrLKOpticalFlow> m_pyrlk;
+#endif
+	cv::Mat m_last_homography_mat;
+	port_Mat m_last_frame;	
+	
+	inline void ego_motion_compansate(port_Mat & src, port_Mat & dst);
+	inline void calculate_points_lk(port_Mat & src, port_Mat & dst, std::vector<cv::Point2f> & points0, std::vector<cv::Point2f> & points1, std::vector<uchar> & status);
+};
 
 #endif

@@ -1,6 +1,10 @@
 CC = g++
-CFLAGS = -Wall -std=c++11
+CFLAGS = -Wall -O3 -std=c++11
+CFLAGS += -DGPU
 CFLAGS += -DVIDEO_PIPELINE
+CFLAGS += -DMOTION_DETECT
+CFLAGS += -DDEBUG_MOTION_DETECTOR 
+CFLAGS += -DDEBUG_FPS
 LDFLAGS =`pkg-config --cflags opencv`
 
 BUILD_PATH = ./build
@@ -8,7 +12,7 @@ SOURCE_PATH = ./src
 TEST_BUILD_PATH = ./test/build
 TEST_SOURCE_PATH = ./test
 
-SOURCES=main.cpp ros_adapter.cpp keyboard.cpp video_stream.cpp
+SOURCES=main.cpp ros_adapter.cpp keyboard.cpp video_stream.cpp motion.cpp
 OBJECTS=$(SOURCES:.cpp=.o)
 EXECUTABLE=path-follower
 

@@ -1,0 +1,7 @@
+g++ -Wall -std=c++11 -DMOTION_DETECT -DDEBUG_MOTION_DETECTOR  -c -I/opt/ros/indigo/include -I./inc src/main.cpp -o ./build/main.o
+g++ -Wall -std=c++11 -DMOTION_DETECT -DDEBUG_MOTION_DETECTOR  -c -I/opt/ros/indigo/include -I./inc src/ros_adapter.cpp -o ./build/ros_adapter.o
+g++ -Wall -std=c++11 -DMOTION_DETECT -DDEBUG_MOTION_DETECTOR  -c -I/opt/ros/indigo/include -I./inc src/keyboard.cpp -o ./build/keyboard.o
+g++ -Wall -std=c++11 -DMOTION_DETECT -DDEBUG_MOTION_DETECTOR  -c -I/opt/ros/indigo/include -I./inc src/video_stream.cpp -o ./build/video_stream.o
+g++ -Wall -std=c++11 -DMOTION_DETECT -DDEBUG_MOTION_DETECTOR  -c -I/opt/ros/indigo/include -I./inc src/motion.cpp -o ./build/motion.o
+cd ./build; \
+	g++ -Wall -std=c++11 -DMOTION_DETECT -DDEBUG_MOTION_DETECTOR  `pkg-config --cflags opencv` main.o ros_adapter.o keyboard.o video_stream.o motion.o -I/opt/ros/indigo/include -I./inc -L/opt/ros/indigo/lib  -o path-follower -lpthread -lroscpp -lrosconsole -lrostime -lroscpp_serialization `pkg-config --libs opencv`

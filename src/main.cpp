@@ -24,19 +24,24 @@
 #include "video_stream.h"
 #endif
 
+#ifdef MOTION_DETECT
+#include "motion.h"
+#endif
+
+#ifdef MOTION_DETECT
+static motion_detector motion;
+#endif
+
 static void process(videoframe_t & frame)
 {
-
-
+#ifdef MOTION_DETECT
+	motion.detect(frame);	
+#endif
 }
 
 int main(int argc, char * argv[])
 {
-#ifdef DEBUG
-	std::cout << "Path-Follower starts. (DEBUG)" << std::endl;
-#else
-	std::cout << "Path-Follower starts." << std::endl;
-#endif
+	std::cout << "Path-Follower running on CPU " << sched_getcpu() << std::endl;
 	
 	//keyboard::set_conio_terminal_mode();	
 	ros_adapter::init(argc, argv);
@@ -54,7 +59,7 @@ int main(int argc, char * argv[])
 			break;
 		}
 	
-#ifdef DEBUG			
+#ifdef DEBUG_FPS			
 		double t = (double)cv::getTickCount();  
 #endif
 
@@ -63,18 +68,17 @@ int main(int argc, char * argv[])
 #else
 		fetch_frame(video, frame);
 #endif
-		process(frame);
-#ifdef DEBUG
-		t = ((double)cv::getTickCount() - t)/cv::getTickFrequency();
-		std::cout << "FPS : " << (1.0 / t) << std::endl;
-#endif
-
-#ifdef DEBUG
 		if (!frame.empty()) {
+			process(frame);
+#ifdef DEBUG_FPS
+			t = ((double)cv::getTickCount() - t)/cv::getTickFrequency();
+			std::cout << "FPS : " << (1.0 / t) << std::endl;
+#endif
+#ifdef DEBUG
 			cv::imshow("frame", frame);
 			cv::waitKey(1);
-		}
 #endif
+		}
 	}
 	
 	ros_adapter::shutdown();

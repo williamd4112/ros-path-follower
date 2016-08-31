@@ -57,7 +57,7 @@ void videostream::read_no_lock(videoframe_t & dst)
 
 void videostream::run()
 {
-	std::cout << "Videostream " << m_id << " running." << std::endl;
+	std::cout << "Videostream " << m_id << " running on CPU " << sched_getcpu() << std::endl;
 
 	videosource_t cap;
 	videosource_init(cap, 0);
