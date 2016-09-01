@@ -61,8 +61,6 @@ void videostream::run()
 {
 	std::cout << "Videostream " << m_id << " running on CPU " << sched_getcpu() << std::endl;
 
-	//videosource_t cap(m_id);	
-	//videosource_init(cap, m_id);
 	cap.set(CV_CAP_PROP_FRAME_WIDTH, m_width);
 	cap.set(CV_CAP_PROP_FRAME_HEIGHT, m_height);
 	videoframe_t tmp;

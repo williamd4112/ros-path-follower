@@ -32,12 +32,20 @@
 #include "lane.hpp"
 #endif
 
+#ifdef MOMENT_DETECT
+#include "moment.hpp"
+#endif
+
 #ifdef MOTION_DETECT
 static motion_detector motion(70, 25, 50);
 #endif
 
 #ifdef LANE_DETECT
 static lane_detector lane;
+#endif
+
+#ifdef MOMENT_DETECT
+static moment_detector moment_white;
 #endif
 
 static void self_check()
@@ -64,6 +72,10 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 
 #ifdef LANE_DETECT
 	lane.detect(frame_ground, frame_ground_hsv);
+#endif
+
+#ifdef MOMENT_DETECT
+	moment_white.detect(frame_ground, frame_ground_hsv, cv::Rect(0, VIDEO_GROUND_HEIGHT - 200, VIDEO_GROUND_WIDTH, 50));
 #endif
 }
 
@@ -116,7 +128,7 @@ int main(int argc, char * argv[])
 #ifdef DEBUG
 #ifdef DEBUG_MAIN
 			cv::imshow("frame-front", frame_front);
-			cv::imshwo("frame-ground", frame_ground):
+			cv::imshow("frame-ground", frame_ground):
 #endif
 			cv::waitKey(1);
 #endif

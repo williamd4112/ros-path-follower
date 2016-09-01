@@ -9,6 +9,7 @@ CFLAGS += -DVIDEO_PIPELINE
 CFLAGS += -DMOTION_DETECT
 CFLAGS += -DLANE_DETECT
 CFLAGS += -DLANE_DETECT_QUANTNIZE
+CFLAGS += -DMOMENT_DETECT
 
 # Debug option
 CFLAGS += -DDEBUG
@@ -16,6 +17,7 @@ CFLAGS += -DDEBUG
 #CFLAGS += -DDEBUG_MOTION_DETECT_BOUNDING_BOX 
 #CFLAGS += -DDEBUG_MOTION_DETECT
 CFLAGS += -DDEBUG_LANE_DETECT
+CFLAGS += -DDEBUG_MOMENT_DETECT
 CFLAGS += -DDEBUG_FPS
 
 LDFLAGS =`pkg-config --cflags opencv`
@@ -29,6 +31,7 @@ SOURCES = main.cpp ros_adapter.cpp keyboard.cpp
 SOURCES += video_stream.cpp 
 SOURCES += motion.cpp 
 SOURCES += lane.cpp
+SOURCES += moment.cpp
 
 OBJECTS=$(SOURCES:.cpp=.o)
 EXECUTABLE=path-follower
