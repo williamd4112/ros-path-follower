@@ -1,6 +1,12 @@
 #ifndef _CONFIG_H_
 #define _CONFIG_H_
 
+#include <cassert>
+#include <cstdint>
+
+#include <iostream>
+#include <algorithm>
+
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/video/video.hpp>
@@ -15,8 +21,8 @@
 #include "opencv2/cudaimgproc.hpp"
 #include "opencv2/cudawarping.hpp"
 
-#define VIDEO_WIDTH 160
-#define VIDEO_HEIGHT 120
+#define VIDEO_GROUND_WIDTH 320
+#define VIDEO_GROUND_HEIGHT 240
 #define VIDEO_FRONT_WIDTH 160
 #define VIDEO_FRONT_HEIGHT 120
 #define MOTION_DETECT_ROI_PADDING 15

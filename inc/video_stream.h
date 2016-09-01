@@ -17,7 +17,7 @@
 class videostream
 {
 public:
-	videostream(int id);
+	videostream(int id, size_t width, size_t height);
 	videostream() {}
 	~videostream();
 	
@@ -27,7 +27,11 @@ public:
 	void read_no_lock(videoframe_t & dst);
 private:
 	int m_id;
+	size_t m_width;
+	size_t m_height;
 	bool m_terminate;
+	
+	videosource_t cap;
 	std::queue<videoframe_t> m_buffer;
 	std::thread m_thread;
 	std::mutex m_mutex;
