@@ -60,7 +60,9 @@ void videostream::run()
 	std::cout << "Videostream " << m_id << " running on CPU " << sched_getcpu() << std::endl;
 
 	videosource_t cap;
-	videosource_init(cap, 0);
+	videosource_init(cap, m_id);
+	cap.set(CV_CAP_PROP_FRAME_WIDTH, VIDEO_WIDTH);
+	cap.set(CV_CAP_PROP_FRAME_HEIGHT, VIDEO_HEIGHT);
 	videoframe_t tmp;
 
     while(!m_terminate) {
@@ -69,7 +71,7 @@ void videostream::run()
 			continue;
 		}	
         m_mutex.lock();
-		if (m_buffer.size() < 4) {
+		if (m_buffer.size() < 30) {
         	m_buffer.push(videoframe_t(tmp.size(), tmp.type()));
        		tmp.copyTo(m_buffer.back());
 #ifdef DEBUG_PIPELINE

@@ -9,9 +9,17 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/cudacodec.hpp>
 
+#include "opencv2/cudaarithm.hpp"
+#include "opencv2/cudafilters.hpp"  
 #include "opencv2/cudaoptflow.hpp"
 #include "opencv2/cudaimgproc.hpp"
 #include "opencv2/cudawarping.hpp"
+
+#define VIDEO_WIDTH 160
+#define VIDEO_HEIGHT 120
+#define VIDEO_FRONT_WIDTH 160
+#define VIDEO_FRONT_HEIGHT 120
+#define MOTION_DETECT_ROI_PADDING 15
 
 typedef cv::Mat videoframe_t;
 typedef cv::VideoCapture videosource_t;
@@ -21,11 +29,19 @@ typedef cv::cuda::GpuMat port_Mat;
 #define port_cvtColor(src, dst, code) (cv::cuda::cvtColor((src), (dst), (code)))
 #define port_equalizeHist(src, dst) (cv::cuda::equalizeHist((src), (dst)))
 #define port_loadMatFromVideo(video_frame, mat) ((mat).upload((video_frame)))
+#define port_warpPerspective(src, src_warp, new_homography_mat, size) cv::cuda::warpPerspective((src), (src_warp), (new_homography_mat), (size))
+#define port_threshold(src_warp, mask, low, val, type) cv::cuda::threshold((src_warp), (mask), (low), (val), (type))
+#define port_bitwise_and(src, dst, dst_masked, mask) cv::cuda::bitwise_and((src), (dst), (dst_masked), (mask))
+#define port_absdiff(src, dst, diff) cv::cuda::absdiff((src), (dst), (diff))
 #else
 typedef cv::Mat port_Mat;
 #define port_cvtColor(src, dst, code) (cv::cvtColor((src), (dst), (code)))
 #define port_equalizeHist(src, dst) (cv::equalizeHist((src), (dst)))
 #define port_loadMatFromVideo(video_frame, mat) ((video_frame).copyTo((mat)))
+#define port_warpPerspective(src, src_warp, new_homography_mat, size) cv::warpPerspective((src), (src_warp), (new_homography_mat), (size))
+#define port_threshold(src_warp, mask, low, val, type) cv::threshold((src_warp), (mask), (low), (val), (type))
+#define port_bitwise_and(src, dst, dst_masked, mask) cv::bitwise_and((src), (dst), (dst_masked), (mask))
+#define port_absdiff(src, dst, diff) cv::absdiff((src), (dst), (diff))
 #endif
 
 

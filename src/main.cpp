@@ -29,8 +29,18 @@
 #endif
 
 #ifdef MOTION_DETECT
-static motion_detector motion;
+static motion_detector motion(70, 25, 50);
 #endif
+
+static void self_check()
+{
+	std::cout << "Path-Follower running on CPU " << sched_getcpu() << std::endl;
+#ifdef GPU
+	std::cout << "Use GPU : On" << std::endl;
+#else
+	std::cout << "Use GPU : Off" << std::endl;
+#endif
+}
 
 static void process(videoframe_t & frame)
 {
@@ -41,15 +51,19 @@ static void process(videoframe_t & frame)
 
 int main(int argc, char * argv[])
 {
-	std::cout << "Path-Follower running on CPU " << sched_getcpu() << std::endl;
+	self_check();
 	
-	//keyboard::set_conio_terminal_mode();	
 	ros_adapter::init(argc, argv);
 
+	int ground_cam_id = atoi(argv[1]);
+	int front_cam_id = atoi(argv[2]);
+
 #ifdef VIDEO_PIPELINE	
-	videostream video(0);
+	videostream video(front_cam_id);
 #else
-	videosource_t video(0);
+	videosource_t video(front_cam_id);
+	video.set(CV_CAP_PROP_FRAME_WIDTH, VIDEO_WIDTH);
+	video.set(CV_CAP_PROP_FRAME_HEIGHT, VIDEO_HEIGHT);
 #endif
 
 	videoframe_t frame;
@@ -72,10 +86,12 @@ int main(int argc, char * argv[])
 			process(frame);
 #ifdef DEBUG_FPS
 			t = ((double)cv::getTickCount() - t)/cv::getTickFrequency();
-			std::cout << "FPS : " << (1.0 / t) << std::endl;
+			std::cout << "\rFPS : " << (1.0 / t);
 #endif
 #ifdef DEBUG
+#ifdef DEBUG_MAIN
 			cv::imshow("frame", frame);
+#endif
 			cv::waitKey(1);
 #endif
 		}

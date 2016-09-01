@@ -2,6 +2,8 @@
 
 #include "motion.h"
 
+static cv::Rect ROI(MOTION_DETECT_ROI_PADDING, MOTION_DETECT_ROI_PADDING, VIDEO_FRONT_WIDTH-MOTION_DETECT_ROI_PADDING, VIDEO_FRONT_HEIGHT-MOTION_DETECT_ROI_PADDING);
+
 /**
   * GPU helper functions
   */
@@ -21,6 +23,7 @@ static void download(const cv::cuda::GpuMat & d_mat, std::vector<uchar> & vec)
 }
 #endif
 
+#ifdef DEBUG_MOTION_DETECT
 static void drawArrows(cv::Mat & frame, const std::vector<cv::Point2f> & prevPts, const std::vector<cv::Point2f> & nextPts, const std::vector<uchar> & status, cv::Scalar line_color = cv::Scalar(0, 0, 255))
 {
     for (size_t i = 0; i < prevPts.size(); ++i)
@@ -59,6 +62,7 @@ static void drawArrows(cv::Mat & frame, const std::vector<cv::Point2f> & prevPts
         }
     }
 }
+#endif
 
 motion_detector::motion_detector(int32_t diff_ts, int32_t area_ts, int maxCorners, double qualityLevel, double minDistance, int blockSize, bool useHarrisDetector, double harrisK, cv::Size winSize, int maxLevel, int iters, bool useInitialFlow):
 	m_diff_ts(diff_ts), m_area_ts(area_ts), m_maxCorners(maxCorners), 
@@ -81,6 +85,7 @@ motion_detector::motion_detector(int32_t diff_ts, int32_t area_ts, int maxCorner
 			harrisK);
  	m_pyrlk = cv::cuda::SparsePyrLKOpticalFlow::create(
                 winSize, maxLevel, iters);
+	m_blurFilter = cv::cuda::createGaussianFilter(CV_8U, CV_8U, cv::Size(21, 21), 0, 0, cv::BORDER_DEFAULT, -1);
 #endif
 
 }
@@ -98,45 +103,126 @@ int32_t motion_detector::detect(const videoframe_t & frame)
 		port_equalizeHist(m_last_frame, m_last_frame);
 	}
 	else {	
-		port_Mat dst;
-		port_loadMatFromVideo(frame, dst);
-		port_cvtColor(dst, dst, CV_BGR2GRAY);
-		port_equalizeHist(dst, dst);
+		port_Mat cur_frame;
+#ifdef DEBUG_MOTION_DETECT_BOUNDING_BOX
+		cv::Mat _cur_frame;
+#endif
+		port_Mat diff;
+		std::vector<cv::Rect> rects;	
+		port_loadMatFromVideo(frame, cur_frame);
+#ifdef DEBUG_MOTION_DETECT_BOUNDING_BOX
+#ifdef GPU
+		cur_frame.download(_cur_frame);
+#else
+		cur_frame.copyTo(_cur_frame);
+#endif
+#endif
+		port_cvtColor(cur_frame, cur_frame, CV_BGR2GRAY);
+		port_equalizeHist(cur_frame, cur_frame);
 
-		ego_motion_compansate(m_last_frame, dst);
-		dst.copyTo(m_last_frame);
+		ego_motion_compansate(m_last_frame, cur_frame, diff, m_diff_ts); 
+		find_motion_area(diff, rects, m_area_ts);
+
+#ifdef DEBUG_MOTION_DETECT_BOUNDING_BOX
+		_cur_frame = _cur_frame(ROI);
+		for (auto rect : rects) {
+			cv::rectangle(_cur_frame, rect.tl(), rect.br(), cv::Scalar(0, 255, 0), 2);	
+		}
+		cv::imshow("motion_detector-motion_area", _cur_frame);
+#endif
+
+		cur_frame.copyTo(m_last_frame);
 	}
 	return 0;
 }
 
-inline void motion_detector::ego_motion_compansate(port_Mat & src, port_Mat & dst)
+inline void motion_detector::find_motion_area(const port_Mat & diff, std::vector<cv::Rect> & rects, int area_ts)
+{
+	std::vector<std::vector<cv::Point> > contours;
+#ifdef GPU_BLOB
+#else	
+
+#ifdef GPU
+	cv::Mat diff_host;
+	diff.download(diff_host);
+	cv::dilate(diff_host, diff_host, cv::Mat(), cv::Point(-1, -1), 2);
+#else
+	cv::dilate(diff, diff, cv::Mat());
+#endif
+	
+#ifdef GPU
+	cv::findContours(diff_host, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+#else
+	cv::findContours(diff, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
+#endif	
+	for(auto contour : contours) {
+		if (cv::contourArea(contour) > area_ts) {
+			rects.push_back(cv::boundingRect(contour));
+		}
+	}		
+#endif		
+}
+
+inline void motion_detector::ego_motion_compansate(const port_Mat & src, const port_Mat & dst, port_Mat & diff, int diff_ts)
 {
 	std::vector<cv::Point2f> points[2];
 	std::vector<uchar> status;
+	port_Mat mask;
+	port_Mat src_warp;
+	port_Mat dst_masked;
 
 	calculate_points_lk(src, dst, points[0], points[1], status);
 	cv::Mat new_homography_mat = cv::findHomography(points[0], points[1], CV_RANSAC, 1);	
 	
-	cv::cuda::warpPerspective(src, src, new_homography_mat, src.size());
+	port_warpPerspective(src, src_warp, new_homography_mat, src.size());
+	port_threshold(src_warp, mask, 0, 255, CV_THRESH_BINARY);	
 	
-	m_last_homography_mat = new_homography_mat * m_last_homography_mat;
-
-#ifdef DEBUG_MOTION_DETECTOR
-	cv::Mat visual;
+	dst.copyTo(dst_masked, mask);
 #ifdef GPU
-	src.download(visual);
+	m_blurFilter->apply(src_warp, src_warp);
+	m_blurFilter->apply(dst_masked, dst_masked);
 #else
-	src.copyTo(visual);
+	cv::GaussianBlur(src_warp, src_warp, cv::Size(3, 3), 0);
+	cv::GaussianBlur(dst_masked, dst_masked, cv::Size(3, 3), 0);	
 #endif
-	drawArrows(visual, points[0], points[1], status);
-	if (!visual.empty()) {
-		cv::imshow("ego-motion-compansate", visual);
-		cv::waitKey(1);
-	}
+	port_absdiff(src_warp, dst_masked, diff);
+	diff = diff(ROI);
+#ifdef DEBUG_MOTION_DETECT
+	cv::Mat _diff_no_thresh;
+#ifdef GPU
+	diff.download(_diff_no_thresh);
+#else
+	diff.copyTo(_diff_no_thresh);
+#endif
+#endif
+	port_threshold(diff, diff, diff_ts, 255, CV_THRESH_BINARY);
+
+#ifdef DEBUG_MOTION_DETECT
+	cv::Mat _src_warp;
+	cv::Mat _dst_masked;
+	cv::Mat _mask;
+	cv::Mat _diff;
+#ifdef GPU
+	src_warp.download(_src_warp);
+	dst_masked.download(_dst_masked);
+	mask.download(_mask);
+	diff.download(_diff);
+#else
+	src_warp.copyTo(_src_warp);
+	mask.copyTo(_mask);
+	dst_masked.copyTo(_dst_masked);
+	diff.copyTo(_diff);
+#endif
+	//drawArrows(visual, points[0], points[1], status);
+	cv::imshow("ego-motion-src_warp", _src_warp);
+	cv::imshow("ego-motion-mask", _mask);
+	cv::imshow("ego-motion-dst_masked", _dst_masked);
+	cv::imshow("ego-motion-diff-no-ts", _diff_no_thresh);
+	cv::imshow("ego-motion-diff", _diff);
 #endif
 }
 
-inline void motion_detector::calculate_points_lk(port_Mat & src, port_Mat & dst, std::vector<cv::Point2f> & points0, std::vector<cv::Point2f> & points1, std::vector<uchar> & status)
+inline void motion_detector::calculate_points_lk(const port_Mat & src, const port_Mat & dst, std::vector<cv::Point2f> & points0, std::vector<cv::Point2f> & points1, std::vector<uchar> & status)
 {
 	static cv::TermCriteria termcrit(cv::TermCriteria::COUNT | cv::TermCriteria::EPS,20, 0.03);
 	static cv::Size winSize(21, 21);
@@ -146,7 +232,7 @@ inline void motion_detector::calculate_points_lk(port_Mat & src, port_Mat & dst,
 	port_Mat d_points1;
 	port_Mat d_status;
 	
-	m_feature_detector->detect(src, d_points0);
+	m_feature_detector->detect(dst, d_points0);
 	m_pyrlk->calc(src, dst, d_points0, d_points1, d_status);
 
 	download(d_points0, points0);
@@ -163,7 +249,7 @@ inline void motion_detector::calculate_points_lk(port_Mat & src, port_Mat & dst,
 			m_blockSize, 
 			m_useHarrisDetector,
 			m_harrisK);
-	//cv::cornerSubPix(dst, points1, subPixWinSize, cv::Size(-1,-1), termcrit);
+	//cv::cornerSubPix(dst, points0, subPixWinSize, cv::Size(-1,-1), termcrit);
 	cv::calcOpticalFlowPyrLK(src, dst, points0, points1, status, err, winSize,
                                  3, termcrit, 0, 0.001);
 #endif		
