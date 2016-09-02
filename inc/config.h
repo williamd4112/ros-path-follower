@@ -29,6 +29,7 @@
 #define MOTION_DETECT_ROI_PADDING 20
 #define MOMENT_DETECT_HEIGHT 50
 #define MOMENT_DETECT_Y 200
+#define OBJECT_DETECT_REDCIRCLE_BLUR_SIZE 3
 
 typedef cv::Mat videoframe_t;
 typedef cv::VideoCapture videosource_t;

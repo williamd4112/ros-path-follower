@@ -11,9 +11,10 @@ object_haar_detector::~object_haar_detector()
 {
 }
 
-int32_t object_haar_detector::detect(
+void object_haar_detector::detect(
 	const videoframe_t & frame, 
-	const videoframe_t & frame_gray, 
+	const videoframe_t & frame_gray,
+	std::vector<cv::Rect> & targets,
 	double scaleFactor, 
 	int minNeighbors,
 	int flags, 
@@ -33,14 +34,14 @@ int32_t object_haar_detector::detect(
 		flags, 
 		minSize, 
 		maxSize);
-	for(auto obj : objs) {
+	targets.assign(objs.begin(), objs.end());
 #ifdef DEBUG_OBJECT_HAAR_DETECT
+	for(auto obj : objs) {
 		cv::rectangle(_frame, obj, cv::Scalar(0, 255, 0), 2);		
-#endif
 	}
+#endif
 #ifdef DEBUG_OBJECT_HAAR_DETECT
 	cv::imshow("object-haar-detector: frame", _frame);
 #endif
-	return 0;
 }
 
