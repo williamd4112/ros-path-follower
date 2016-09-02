@@ -1,44 +1,81 @@
+#-include "feature.mk"
+# Module config
+MODULE_ROS_ADAPTER = n
+MODULE_VIDEO_PIPELINE = y
+MODULE_MOTION_DETECT = y
+MODULE_LANE_DETECT = n
+MODULE_LANE_DETECT_QUANTNIZE = n
+MODULE_MOMENT_DETECT = n
+MODULE_OBJECT_DETECT = y
+
+# Compiler option
 CC = g++
 CFLAGS = -Wall -O3 -std=c++11
 
 # CPU of GPU
 #CFLAGS += -DGPU
 
+SOURCES = main.cpp keyboard.cpp
+BUILD_PATH = ./build
+SOURCE_PATH = ./src
+TEST_BUILD_PATH = ./test/build
+TEST_SOURCE_PATH = ./test
+
+OBJECTS=$(SOURCES:.cpp=.o)
+EXECUTABLE=path-follower
+
+LDFLAGS =`pkg-config --cflags opencv`
+INC_PATH = -I./inc
+LIB_PATH = 
+LIBS = -lpthread `pkg-config --libs opencv`
+ 
 # Features
+ifeq ($(MODULE_ROS_ADAPTER), y)
+CFLAGS += ROS_ADAPTER
+SOURCES += ros_adapter.cpp 
+INC_PATH += -I/opt/ros/indigo/include
+LIB_PATH += -L/opt/ros/indigo/lib
+LIBS += -lroscpp -lrosconsole -lrostime -lroscpp_serialization
+endif
+
+ifeq ($(MODULE_VIDEO_PIPELINE), y)
 CFLAGS += -DVIDEO_PIPELINE
+SOURCES += video_stream.cpp 
+endif
+
+ifeq ($(MODULE_MOTION_DETECT), y)
 CFLAGS += -DMOTION_DETECT
+SOURCES += motion.cpp 
+endif
+
+ifeq ($(MODULE_LANE_DETECT), y)
 CFLAGS += -DLANE_DETECT
+SOURCES += lane.cpp
+endif
+
+ifeq ($(MODULE_LANE_DETECT_QUANTNIZE), y)
 CFLAGS += -DLANE_DETECT_QUANTNIZE
+endif
+
+ifeq ($(MODULE_MOMENT_DETECT), y)
 CFLAGS += -DMOMENT_DETECT
+SOURCES += moment.cpp
+endif
+
+ifeq ($(MODULE_OBJECT_DETECT), y)
+CFLAGS += -DOBJECT_DETECT
+SOURCES += object.cpp 
+endif
 
 # Debug option
 CFLAGS += -DDEBUG
 #CFLAGS += -DDEBUG_MAIN
 #CFLAGS += -DDEBUG_MOTION_DETECT_BOUNDING_BOX 
 #CFLAGS += -DDEBUG_MOTION_DETECT
-CFLAGS += -DDEBUG_LANE_DETECT
-CFLAGS += -DDEBUG_MOMENT_DETECT
+#CFLAGS += -DDEBUG_LANE_DETECT
+#CFLAGS += -DDEBUG_MOMENT_DETECT
+CFLAGS += -DDEBUG_OBJECT_HAAR_DETECT
 CFLAGS += -DDEBUG_FPS
-
-LDFLAGS =`pkg-config --cflags opencv`
-
-BUILD_PATH = ./build
-SOURCE_PATH = ./src
-TEST_BUILD_PATH = ./test/build
-TEST_SOURCE_PATH = ./test
-
-SOURCES = main.cpp ros_adapter.cpp keyboard.cpp 
-SOURCES += video_stream.cpp 
-SOURCES += motion.cpp 
-SOURCES += lane.cpp
-SOURCES += moment.cpp
-
-OBJECTS=$(SOURCES:.cpp=.o)
-EXECUTABLE=path-follower
-
-INC_PATH = -I/opt/ros/indigo/include -I./inc
-LIB_PATH = -L/opt/ros/indigo/lib 
-LIBS = -lpthread -lroscpp -lrosconsole -lrostime -lroscpp_serialization `pkg-config --libs opencv`
 
 all: $(EXECUTABLE)
     

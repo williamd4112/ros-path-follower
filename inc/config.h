@@ -13,6 +13,7 @@
 #include <opencv2/videoio/videoio.hpp>
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <opencv2/objdetect/objdetect.hpp>
 #include <opencv2/cudacodec.hpp>
 
 #include "opencv2/cudaarithm.hpp"
@@ -25,7 +26,9 @@
 #define VIDEO_GROUND_HEIGHT 240
 #define VIDEO_FRONT_WIDTH 160
 #define VIDEO_FRONT_HEIGHT 120
-#define MOTION_DETECT_ROI_PADDING 15
+#define MOTION_DETECT_ROI_PADDING 20
+#define MOMENT_DETECT_HEIGHT 50
+#define MOMENT_DETECT_Y 200
 
 typedef cv::Mat videoframe_t;
 typedef cv::VideoCapture videosource_t;

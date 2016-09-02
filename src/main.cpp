@@ -17,8 +17,11 @@
 #include <opencv2/videoio/videoio.hpp>
 
 #include "config.h"
-#include "ros_adapter.h"
 #include "keyboard.h"
+
+#ifdef ROS_ADAPTER
+#include "ros_adapter.h"
+#endif
 
 #ifdef VIDEO_PIPELINE
 #include "video_stream.h"
@@ -36,6 +39,10 @@
 #include "moment.hpp"
 #endif
 
+#ifdef OBJECT_DETECT
+#include "object.hpp"
+#endif
+
 #ifdef MOTION_DETECT
 static motion_detector motion(70, 25, 50);
 #endif
@@ -46,6 +53,10 @@ static lane_detector lane;
 
 #ifdef MOMENT_DETECT
 static moment_detector moment_white;
+#endif
+
+#ifdef OBJECT_DETECT
+static object_haar_detector object("data/traffic_light.xml");
 #endif
 
 static void self_check()
@@ -62,9 +73,13 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 {
 	videoframe_t frame_front_hsv;
 	videoframe_t frame_ground_hsv;
-
 	cv::cvtColor(frame_front, frame_front_hsv, CV_BGR2HSV);
 	cv::cvtColor(frame_ground, frame_ground_hsv, CV_BGR2HSV);
+
+	videoframe_t frame_front_gray;
+	videoframe_t frame_ground_gray;
+	cv::cvtColor(frame_front, frame_front_gray, CV_BGR2GRAY);
+	cv::cvtColor(frame_ground, frame_ground_gray, CV_BGR2GRAY);
 
 #ifdef MOTION_DETECT
 	motion.detect(frame_front);	
@@ -75,7 +90,11 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 #endif
 
 #ifdef MOMENT_DETECT
-	moment_white.detect(frame_ground, frame_ground_hsv, cv::Rect(0, VIDEO_GROUND_HEIGHT - 200, VIDEO_GROUND_WIDTH, 50));
+	moment_white.detect(frame_ground, frame_ground_hsv, cv::Rect(0, VIDEO_GROUND_HEIGHT - MOMENT_DETECT_Y, VIDEO_GROUND_WIDTH, MOMENT_DETECT_HEIGHT));
+#endif
+
+#ifdef OBJECT_DETECT
+	object.detect(frame_front, frame_front_gray);
 #endif
 }
 
@@ -83,7 +102,9 @@ int main(int argc, char * argv[])
 {
 	self_check();
 	
+#ifdef ROS_ADAPTER
 	ros_adapter::init(argc, argv);
+#endif
 
 	int ground_cam_id = atoi(argv[1]);
 	int front_cam_id = atoi(argv[2]);
@@ -135,7 +156,9 @@ int main(int argc, char * argv[])
 		}
 	}
 	cv::destroyAllWindows();
+#ifdef ROS_ADAPTER
 	ros_adapter::shutdown();
+#endif
 
 	return 0;
 }
