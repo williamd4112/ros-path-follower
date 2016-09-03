@@ -10,16 +10,16 @@ moment_detector::~moment_detector()
 {
 }	
 
-cv::Point2f moment_detector::detect(const videoframe_t & frame, const videoframe_t & frame_hsv, 
+int32_t moment_detector::detect(const videoframe_t & frame, const videoframe_t & frame_hsv, 
 	const cv::Rect & roi)
 {
 	cv::Moments m;
-	cv::Point2f center(0, 0);
+	cv::Point2f center(frame.cols / 2, frame.rows / 2);
 
-#ifdef GPU
+#ifdef GPU_MOMENT
 	assert(false);
 #else
-	port_Mat mask;
+	cv::Mat mask;
 	cv::inRange(frame_hsv, m_lower, m_upper, mask);
 	mask = mask(roi);
 	m = cv::moments(mask);
@@ -31,7 +31,7 @@ cv::Point2f moment_detector::detect(const videoframe_t & frame, const videoframe
 #ifdef DEBUG_MOMENT_DETECT
 	cv::Mat _mask;
 	cv::Mat _frame_result;
-#ifdef GPU
+#ifdef GPU_MOMENT
 	assert(false);
 #else
 	mask.copyTo(_mask);
@@ -44,5 +44,5 @@ cv::Point2f moment_detector::detect(const videoframe_t & frame, const videoframe
 	cv::imshow("moment-mask", _mask);
 	cv::imshow("moment-frame_result", _frame_result);
 #endif
-	return center;
+	return center.x - frame.cols / 2;
 }

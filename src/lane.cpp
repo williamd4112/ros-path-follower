@@ -85,12 +85,12 @@ lane_detector::~lane_detector()
 int32_t lane_detector::detect(const videoframe_t & frame, const videoframe_t & hsv)
 {
 	std::vector<cv::Vec2f> lines;
-#ifdef GPU
+#ifdef GPU_LANE
 	assert(false);
 #else
-	port_Mat edges;
-	port_Mat mask;
-	port_Mat frame_masked;
+	cv::Mat edges;
+	cv::Mat mask;
+	cv::Mat frame_masked;
 
 	cv::inRange(hsv, m_lane_color_lower, m_lane_color_upper, mask);
 	frame.copyTo(frame_masked, mask);
@@ -105,7 +105,7 @@ int32_t lane_detector::detect(const videoframe_t & frame, const videoframe_t & h
 #ifdef DEBUG_LANE_DETECT
 	cv::Mat _frame_masked;
 	cv::Mat _frame_lane;
-#ifdef GPU
+#ifdef GPU_LANE
 	assert(false);
 #else
 	frame_masked.copyTo(_frame_masked);

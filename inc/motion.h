@@ -29,7 +29,7 @@ private:
 	int m_iters;
 	bool m_useInitialFlow;
 	
-#ifdef GPU
+#ifdef GPU_MOTION
 	cv::Ptr<cv::cuda::CornersDetector> m_feature_detector;
 	cv::Ptr<cv::cuda::SparsePyrLKOpticalFlow> m_pyrlk;
 	cv::Ptr<cv::cuda::Filter> m_blurFilter; 

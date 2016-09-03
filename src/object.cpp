@@ -21,6 +21,8 @@ void object_haar_detector::detect(
 	cv::Size minSize,
 	cv::Size maxSize)
 {
+#ifdef GPU_OBJECT_HAAR
+#else
 #ifdef DEBUG_OBJECT_HAAR_DETECT
 	cv::Mat _frame;
 	frame.copyTo(_frame);
@@ -42,6 +44,7 @@ void object_haar_detector::detect(
 #endif
 #ifdef DEBUG_OBJECT_HAAR_DETECT
 	cv::imshow("object-haar-detector: frame", _frame);
+#endif
 #endif
 }
 

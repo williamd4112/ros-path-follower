@@ -7,7 +7,7 @@ static cv::Rect ROI(MOTION_DETECT_ROI_PADDING, MOTION_DETECT_ROI_PADDING, VIDEO_
 /**
   * GPU helper functions
   */
-#ifdef GPU
+#ifdef GPU_MOTION
 static void download(const cv::cuda::GpuMat & d_mat, std::vector<cv::Point2f> & vec)
 {
     vec.resize(d_mat.cols);
@@ -73,7 +73,7 @@ motion_detector::motion_detector(int32_t diff_ts, int32_t area_ts, int maxCorner
 	m_useInitialFlow(useInitialFlow),
 	m_last_homography_mat(cv::Mat::ones(3, 3, CV_64FC1))
 {
-#ifdef GPU
+#ifdef GPU_MOTION
 	m_feature_detector = 
 		cv::cuda::createGoodFeaturesToTrackDetector(
 			CV_8UC1, 
@@ -97,6 +97,7 @@ motion_detector::~motion_detector()
 
 int32_t motion_detector::detect(const videoframe_t & frame)
 {
+	int32_t ret = 0;
 	if (m_last_frame.empty()) {
 		port_loadMatFromVideo(frame, m_last_frame);	
 		port_cvtColor(m_last_frame, m_last_frame, CV_BGR2GRAY);
@@ -111,7 +112,7 @@ int32_t motion_detector::detect(const videoframe_t & frame)
 		std::vector<cv::Rect> rects;	
 		port_loadMatFromVideo(frame, cur_frame);
 #ifdef DEBUG_MOTION_DETECT_BOUNDING_BOX
-#ifdef GPU
+#ifdef GPU_MOTION
 		cur_frame.download(_cur_frame);
 #else
 		cur_frame.copyTo(_cur_frame);
@@ -130,19 +131,22 @@ int32_t motion_detector::detect(const videoframe_t & frame)
 		}
 		cv::imshow("motion_detector-motion_area", _cur_frame);
 #endif
-
 		cur_frame.copyTo(m_last_frame);
+		
+		if (rects.size() > 0) {
+			ret = 1;
+		}
 	}
-	return 0;
+	return ret;
 }
 
 inline void motion_detector::find_motion_area(const port_Mat & diff, std::vector<cv::Rect> & rects, int area_ts)
 {
 	std::vector<std::vector<cv::Point> > contours;
-#ifdef GPU_BLOB
+#ifdef GPU_MOTION_BLOB
 #else	
 
-#ifdef GPU
+#ifdef GPU_MOTION
 	cv::Mat diff_host;
 	diff.download(diff_host);
 	cv::dilate(diff_host, diff_host, cv::Mat(), cv::Point(-1, -1), 2);
@@ -150,7 +154,7 @@ inline void motion_detector::find_motion_area(const port_Mat & diff, std::vector
 	cv::dilate(diff, diff, cv::Mat());
 #endif
 	
-#ifdef GPU
+#ifdef GPU_MOTION
 	cv::findContours(diff_host, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
 #else
 	cv::findContours(diff, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
@@ -178,7 +182,7 @@ inline void motion_detector::ego_motion_compansate(const port_Mat & src, const p
 	port_threshold(src_warp, mask, 0, 255, CV_THRESH_BINARY);	
 	
 	dst.copyTo(dst_masked, mask);
-#ifdef GPU
+#ifdef GPU_MOTION
 	m_blurFilter->apply(src_warp, src_warp);
 	m_blurFilter->apply(dst_masked, dst_masked);
 #else
@@ -189,7 +193,7 @@ inline void motion_detector::ego_motion_compansate(const port_Mat & src, const p
 	diff = diff(ROI);
 #ifdef DEBUG_MOTION_DETECT
 	cv::Mat _diff_no_thresh;
-#ifdef GPU
+#ifdef GPU_MOTION
 	diff.download(_diff_no_thresh);
 #else
 	diff.copyTo(_diff_no_thresh);
@@ -202,7 +206,7 @@ inline void motion_detector::ego_motion_compansate(const port_Mat & src, const p
 	cv::Mat _dst_masked;
 	cv::Mat _mask;
 	cv::Mat _diff;
-#ifdef GPU
+#ifdef GPU_MOTION
 	src_warp.download(_src_warp);
 	dst_masked.download(_dst_masked);
 	mask.download(_mask);
@@ -227,7 +231,7 @@ inline void motion_detector::calculate_points_lk(const port_Mat & src, const por
 	static cv::TermCriteria termcrit(cv::TermCriteria::COUNT | cv::TermCriteria::EPS, 20, 0.03);
 	static cv::Size winSize(21, 21);
 	static cv::Size subPixWinSize(10, 10);
-#ifdef GPU
+#ifdef GPU_MOTION
 	port_Mat d_points0;
 	port_Mat d_points1;
 	port_Mat d_status;
