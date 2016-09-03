@@ -182,8 +182,8 @@ inline void motion_detector::ego_motion_compansate(const port_Mat & src, const p
 	m_blurFilter->apply(src_warp, src_warp);
 	m_blurFilter->apply(dst_masked, dst_masked);
 #else
-	cv::GaussianBlur(src_warp, src_warp, cv::Size(3, 3), 0);
-	cv::GaussianBlur(dst_masked, dst_masked, cv::Size(3, 3), 0);	
+	cv::GaussianBlur(src_warp, src_warp, cv::Size(11, 11), 0);
+	cv::GaussianBlur(dst_masked, dst_masked, cv::Size(11, 11), 0);	
 #endif
 	port_absdiff(src_warp, dst_masked, diff);
 	diff = diff(ROI);
@@ -224,7 +224,7 @@ inline void motion_detector::ego_motion_compansate(const port_Mat & src, const p
 
 inline void motion_detector::calculate_points_lk(const port_Mat & src, const port_Mat & dst, std::vector<cv::Point2f> & points0, std::vector<cv::Point2f> & points1, std::vector<uchar> & status)
 {
-	static cv::TermCriteria termcrit(cv::TermCriteria::COUNT | cv::TermCriteria::EPS,20, 0.03);
+	static cv::TermCriteria termcrit(cv::TermCriteria::COUNT | cv::TermCriteria::EPS, 20, 0.03);
 	static cv::Size winSize(21, 21);
 	static cv::Size subPixWinSize(10, 10);
 #ifdef GPU
@@ -249,7 +249,7 @@ inline void motion_detector::calculate_points_lk(const port_Mat & src, const por
 			m_blockSize, 
 			m_useHarrisDetector,
 			m_harrisK);
-	//cv::cornerSubPix(dst, points0, subPixWinSize, cv::Size(-1,-1), termcrit);
+	cv::cornerSubPix(dst, points0, subPixWinSize, cv::Size(-1,-1), termcrit);
 	cv::calcOpticalFlowPyrLK(src, dst, points0, points1, status, err, winSize,
                                  3, termcrit, 0, 0.001);
 #endif		
