@@ -16,7 +16,7 @@
 
 #include "video_stream.h"
 
-videostream::videostream(int id, size_t width, size_t height):
+videostream::videostream(int id, size_t width, size_t height, int buffsize):
 	m_id(id), m_width(width), m_height(height), m_terminate(false)
 {
 	cap.open(id);
@@ -71,7 +71,7 @@ void videostream::run()
 			continue;
 		}	
         m_mutex.lock();
-		if (m_buffer.size() < 30) {
+		if (m_buffer.size() < m_buffsize) {
         	m_buffer.push(videoframe_t(tmp.size(), tmp.type()));
        		tmp.copyTo(m_buffer.back());
 #ifdef DEBUG_PIPELINE
