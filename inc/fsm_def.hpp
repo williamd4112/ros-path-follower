@@ -8,7 +8,6 @@ typedef enum state_t
     STATE_NORMAL = 0,
 #ifdef MOTION_DETECT
     STATE_MOTION,
-    STATE_APPROCHING,
 #endif
 #ifdef OBJECT_DETECT
     STATE_TRAFFIC_LIGHT,

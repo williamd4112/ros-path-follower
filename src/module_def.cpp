@@ -2,6 +2,7 @@
 
 #ifdef OBJECT_DETECT
 int32_t redcircle_find(const videoframe_t & frame, const videoframe_t & frame_hsv, std::vector<cv::Rect> & targets)
+{
 
     int32_t ret = 0;
 

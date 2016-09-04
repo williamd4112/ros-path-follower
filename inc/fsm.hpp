@@ -56,8 +56,9 @@ public:
     
     /*
      *  @brief  handle event and state translation 
+     *  @return is update
      */
-    void update();
+    bool update();
     
     /*
      *  @brief  get current state
@@ -133,7 +134,7 @@ void fsm<T>::fire_event(event_id_t eid)
 }
 
 template <typename T>
-void fsm<T>::update()
+bool fsm<T>::update()
 {
 #ifdef DEBUG_FSM
     state_id_t pre_state;
@@ -151,6 +152,8 @@ void fsm<T>::update()
     
     /*  Clear event */
     m_cur_event = FSM_INVALID;
+
+	return (pre_state != m_cur_state);
 }
 
 template <typename T>

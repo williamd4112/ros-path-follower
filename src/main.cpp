@@ -11,7 +11,9 @@
 
 /*  Config variables */
 static float g_linear_init = 0.1f;
-static float g_angular_scale = 0.0055f;
+static float g_angular_scale = 0.0060f;
+static float g_linear_slow_rate = -6.0f;
+
 static int g_green_range = 50;
 
 /*  Global variables */
@@ -43,6 +45,9 @@ object_haar_detector object(OBJECT_DETECT_TRAFFIC_LIGHT_CASCADE_FILE_PATH);
 #define MODULE_ID_OBJECT 3
 #define MODULE_ID_IMU 4
 #define is_module_enable(id) (g_module_enable[(id)])
+#define ON true
+#define OFF false
+#define set_module(id, en) (g_module_enable[(id)] = (en))
 
 static const char * g_module_name[] = {
     "Motion",
@@ -159,7 +164,126 @@ static void setup_fsm()
 
 static void process_fsm_state(const state_t & state)
 {
-
+	switch(state) {
+		case STATE_NORMAL:
+#ifdef MOTION_DETECT
+			set_module(MODULE_ID_MOTION, ON);
+#endif
+#ifdef LANE_DETECT
+			set_module(MODULE_ID_LANE, ON);
+#endif
+#ifdef MOMENT_DETECT
+			set_module(MODULE_ID_MOMENT, ON);
+#endif
+#ifdef OBJECT_DETECT
+			set_module(MODULE_ID_OBJECT, ON);
+#endif
+#ifdef IMU
+			set_module(MODULE_ID_IMU, ON);
+#endif
+			break;
+#ifdef MOTION_DETECT
+		case STATE_MOTION:
+			set_module(MODULE_ID_MOTION, ON);
+#ifdef LANE_DETECT
+			set_module(MODULE_ID_LANE, OFF);
+#endif
+#ifdef MOMENT_DETECT
+			set_module(MODULE_ID_MOMENT, OFF);
+#endif
+#ifdef OBJECT_DETECT
+			set_module(MODULE_ID_OBJECT, OFF);
+#endif
+#ifdef IMU
+			set_module(MODULE_ID_IMU, OFF);
+#endif
+			break;
+#endif
+#ifdef OBJECT_DETECT
+		case STATE_TRAFFIC_LIGHT:
+#ifdef MOTION_DETECT
+			set_module(MODULE_ID_MOTION, ON);
+#endif
+#ifdef LANE_DETECT
+			set_module(MODULE_ID_LANE, OFF);
+#endif
+#ifdef MOMENT_DETECT
+			set_module(MODULE_ID_MOMENT, OFF);
+#endif
+			set_module(MODULE_ID_OBJECT, ON);
+#ifdef IMU
+			set_module(MODULE_ID_IMU, OFF);
+#endif
+			break;
+#endif
+#ifdef IMU
+		case STATE_SEESAW_UP:
+#ifdef MOTION_DETECT
+			set_module(MODULE_ID_MOTION, OFF);
+#endif
+#ifdef LANE_DETECT
+			set_module(MODULE_ID_LANE, ON);
+#endif
+#ifdef MOMENT_DETECT
+			set_module(MODULE_ID_MOMENT, ON);
+#endif
+#ifdef OBJECT_DETECT
+			set_module(MODULE_ID_OBJECT, OFF);
+#endif
+			set_module(MODULE_ID_IMU, ON);
+			break;
+		case STATE_SEESAW_DOWN:
+#ifdef MOTION_DETECT
+			set_module(MODULE_ID_MOTION, OFF);
+#endif
+#ifdef LANE_DETECT
+			set_module(MODULE_ID_LANE, ON);
+#endif
+#ifdef MOMENT_DETECT
+			set_module(MODULE_ID_MOMENT, OFF);
+#endif
+#ifdef OBJECT_DETECT
+			set_module(MODULE_ID_OBJECT, OFF);
+#endif
+			set_module(MODULE_ID_IMU, ON);
+			break;
+		case STATE_SEESAW_OFFSET:
+#ifdef MOTION_DETECT
+			set_module(MODULE_ID_MOTION, OFF);
+#endif
+#ifdef LANE_DETECT
+			set_module(MODULE_ID_LANE, OFF);
+#endif
+#ifdef MOMENT_DETECT
+			set_module(MODULE_ID_MOMENT, ON);
+#endif
+#ifdef OBJECT_DETECT
+			set_module(MODULE_ID_OBJECT, OFF);
+#endif
+			set_module(MODULE_ID_IMU, ON);
+			break;
+#endif
+		case STATE_ROAD_NOT_FOUND:
+#ifdef MOTION_DETECT
+			set_module(MODULE_ID_MOTION, ON);
+#endif
+#ifdef LANE_DETECT
+			set_module(MODULE_ID_LANE, OFF);
+#endif
+#ifdef MOMENT_DETECT
+			set_module(MODULE_ID_MOMENT, ON);
+#endif
+#ifdef OBJECT_DETECT
+			set_module(MODULE_ID_OBJECT, ON);
+#endif
+#ifdef IMU
+			set_module(MODULE_ID_IMU, OFF);
+#endif
+			break;
+		default:
+			std::cout << "Unhandled state." << std::endl;
+			break;	
+	}
 }
 
 static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
@@ -168,7 +292,7 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
     static cv::Scalar lower_green(60 - g_green_range, 100, 50);
     static cv::Scalar upper_green(60 + g_green_range, 255, 255);
 
-    /* Frame pre-processing */
+    /*	Frame pre-processing */
     videoframe_t frame_front_hsv;
     videoframe_t frame_ground_hsv;
     cv::cvtColor(frame_front, frame_front_hsv, CV_BGR2HSV);
@@ -179,13 +303,22 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
     cv::cvtColor(frame_front, frame_front_gray, CV_BGR2GRAY);
     cv::cvtColor(frame_ground, frame_ground_gray, CV_BGR2GRAY);
 
+#ifdef MOTION_DETECT
+	float linear_motion = 0.0f;
+	float angular_motion = 0.0f;
+#endif
 #ifdef MOMENT_DETECT
-    float linear_moment = 1.0f;
+    float linear_moment = 0.0f;
     float angular_moment = 0.0f;
+#endif
+#ifdef OBJECT_DETECT
+	float linear_object = 0.0f;
+	float angular_object = 0.0f;
 #endif
     float linear = g_linear_init;
     float angular = 0.0f;  
-
+	
+	/*	IMU */
 #ifdef IMU
 #endif
 
@@ -196,9 +329,13 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
         if (motion.detect(frame_front) > 0) {
             g_fsm.fire_event(event_normal_to_motion);
             isMotion = true;
+			linear_motion = 0.0f;
+			angular_motion = 0.0f;
         }
         else {
             g_fsm.fire_event(event_motion_to_normal);
+			linear_motion = 1.0f;
+			angular_motion = 0.0f;
         }
         std::cout << "Motion (Front) : " << bool2str(isMotion) << std::endl;
     }
@@ -216,58 +353,94 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
         cv::Mat frame_ground_hsv_masked;
         int32_t moment_offset = 0;
         float moment_offset_scale = 0;
-
+		
         cv::inRange(frame_ground, lower_green, upper_green, mask_ground);
         cv::bitwise_not(mask_ground, mask_ground);
         frame_ground_hsv.copyTo(frame_ground_hsv_masked, mask_ground);
-        moment_offset = moment_white.detect(frame_ground, frame_ground_hsv_masked, cv::Rect(0, MOMENT_DETECT_Y, VIDEO_GROUND_WIDTH, MOMENT_DETECT_HEIGHT));
-        if (moment_offset) {
+        
+		auto moment_ret = moment_white.detect(frame_ground, frame_ground_hsv_masked, cv::Rect(0, MOMENT_DETECT_Y, VIDEO_GROUND_WIDTH, MOMENT_DETECT_HEIGHT));       
+		
+		/*	Road found */
+		if (moment_ret.second) {
+			moment_offset = moment_ret.first;
             moment_offset_scale = normalize(moment_offset, VIDEO_GROUND_WIDTH >> 1);
         
-            linear_moment = std::pow(moment_offset_scale + sign_float(moment_offset_scale) * 1.0f, -10);
+            linear_moment = std::pow(moment_offset_scale + sign_float(moment_offset_scale) * 1.0f, -6);
             angular_moment = -((float)moment_offset) * g_angular_scale; 
         }
+		/*	Road not found */
+		else {
+			linear_moment = 0.0f;
+			angular_moment = 0.0f;
+		}
 #ifdef DEBUG_MOMENT_DETECT
-        std::cout << "Moment offset : " << moment_offset << "\tMoment offset scale : " << moment_offset_scale << "\tLinear moment : " << linear_moment << "\tAngular moment : " << angular_moment << std::endl;
+        std::cout << "Moment offset : " << moment_offset 
+				<< "\tMoment offset scale : " << moment_offset_scale 
+				<< "\tLinear moment : " << linear_moment 
+				<< "\tAngular moment : " << angular_moment << std::endl;
 #endif
     }
 #endif
     /*  Object detect */
 #ifdef OBJECT_DETECT
     if (is_module_enable(MODULE_ID_OBJECT)) {
+		bool isTrafficLight = false;
         std::vector<cv::Rect> targets;
         object.detect(frame_front, frame_front_gray, targets);
+		linear_object = 1.0f;
+		angular_object = 0.0f;
 #ifndef DEBUG_OBJECT_DETECT_REDCIRCLE
         if (targets.size() > 0) {
 #endif
             int32_t traffic_light_count  = redcircle_find(frame_front, frame_front_hsv, targets);
             if (traffic_light_count > 0) {
                 /// TODO : Trigget traffic light event
+				linear_object = 0.0f;
+				angular_object = 0.0f;
+				isTrafficLight = true;
+				g_fsm.fire_event(event_normal_to_traffic_light);
             }
 #ifndef DEBUG_OBJECT_DETECT_REDCIRCLE
         }
 #endif
-    }
+		if (!isTrafficLight) {
+			g_fsm.fire_event(event_traffic_light_to_normal);
+		}
+		std::cout << "Traffic Light : " << bool2str(isTrafficLight) << std::endl;
+    }	
 #endif
 
     /*  FSM */
 #ifdef DEBUG_FSM
     check_fsm_table();
 #endif
-    g_fsm.update();
+    bool is_diff = g_fsm.update();
 
 #ifdef MOMENT_DETECT
     linear *= linear_moment;
-    angular = angular_moment;
+    angular += angular_moment;
 #endif
+#ifdef MOTION_DETECT
+	linear *= linear_motion;
+	angular += angular_motion;
+#endif
+#ifdef OBJECT_DETECT
+	linear *= linear_object;
+	angular += angular_object;
+#endif
+
+#ifdef DEBUG
     check_module_enable();
     std::cout << "Linear : " << linear << "\tAngular : " << angular << std::endl;
-    
+#endif
     process_fsm_state(g_fsm.peek());
 
 #ifdef ROS_ADAPTER
     ros_adapter::update(linear, angular);
 #endif
+	if (is_diff) {
+		usleep(500);	
+	}
 }
 
 int main(int argc, char * argv[])
@@ -317,8 +490,7 @@ int main(int argc, char * argv[])
 #endif
 
 #ifdef VIDEO_PIPELINE
-        video_front.read(frame_front);
-        video_ground.read(frame_ground);
+        video_front.read(frame_front); video_ground.read(frame_ground);
 #else
         fetch_frame(video_front, frame_front);
         fetch_frame(video_ground, frame_ground);
@@ -337,7 +509,10 @@ int main(int argc, char * argv[])
             cv::waitKey(1);
 #endif
         }
+#ifdef DEBUG
+		printf("\n==========================================\n");
         printf("\033[H\033[J");
+#endif
     }
     cv::destroyAllWindows();
 
