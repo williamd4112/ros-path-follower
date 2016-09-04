@@ -17,6 +17,71 @@ static int g_green_range = 50;
 /*  Global variables */
 static fsm<state_t> g_fsm;
 
+/*  Module instance */
+#ifdef MOTION_DETECT
+motion_detector motion(50, 50, 1000);
+#endif
+
+#ifdef LANE_DETECT
+lane_detector lane;
+#endif
+
+#ifdef MOMENT_DETECT
+moment_detector moment_white;
+#endif
+
+#ifdef OBJECT_DETECT
+object_haar_detector object(OBJECT_DETECT_TRAFFIC_LIGHT_CASCADE_FILE_PATH);
+#endif
+
+#ifdef IMU
+#endif
+
+#define MODULE_ID_MOTION 0
+#define MODULE_ID_LANE 1
+#define MODULE_ID_MOMENT 2
+#define MODULE_ID_OBJECT 3
+#define MODULE_ID_IMU 4
+#define is_module_enable(id) (g_module_enable[(id)])
+
+static const char * g_module_name[] = {
+    "Motion",
+    "Lane",
+    "Moment",
+    "Object",
+    "IMU"
+};
+
+static bool g_module_enable[] = {
+#ifdef MOTION_DETECT
+    true,
+#else
+    false,
+#endif
+#ifdef LANE_DETECT
+    true,
+#else
+    false,
+#endif
+#ifdef MOMENT_DETECT
+    true,
+#else
+    false,
+#endif
+#ifdef OBJECT_DETECT
+    true,
+#else
+    false,
+#endif
+#ifdef IMU
+    true
+#else
+    false
+#endif
+};
+
+static size_t g_module_num = sizeof(g_module_enable) / sizeof(g_module_enable[0]);
+
 static void self_check()
 {
     std::cout << USE_GPU << std::endl 
@@ -28,13 +93,19 @@ static void self_check()
             << USE_OBJECT_DETECT << std::endl;
 }
 
+static void check_module_enable()
+{
+    for (size_t i = 0; i < g_module_num; i++) {
+        printf("%-10s = %-5s\n", g_module_name[i], bool2str(g_module_enable[i]));
+    }
+}
+
 #ifdef DEBUG_FSM
 static void check_fsm_table()
 {
     std::cout << "State " << state_normal << " : Normal" << std::endl;
 #ifdef MOTION_DETECT
     std::cout << "State " << state_motion << " : Motion" << std::endl;
-    std::cout << "State " << state_approaching << " : Approaching" << std::endl;
 #endif
 #ifdef OBJECT_DETECT
     std::cout << "State " << state_traffic_light << " : Traffic light" << std::endl;
@@ -54,7 +125,6 @@ static void setup_fsm()
     state_normal = g_fsm.set_state(STATE_NORMAL);
 #ifdef MOTION_DETECT
     state_motion = g_fsm.set_state(STATE_MOTION);
-    state_approaching = g_fsm.set_state(STATE_APPROACHING);
 #endif
 #ifdef OBJECT_DETECT
     state_traffic_light = g_fsm.set_state(STATE_TRAFFIC_LIGHT);
@@ -69,8 +139,6 @@ static void setup_fsm()
     /* Setup events */
 #ifdef MOTION_DETECT
     event_normal_to_motion = g_fsm.set_event(state_normal, state_motion);
-    event_motion_to_approaching = g_fsm.set_event(state_motion, state_approaching);
-    event_approaching_to_motion = g_fsm.set_event(state_approaching, state_motion);
     event_motion_to_normal = g_fsm.set_event(state_motion, state_normal);
 #endif
 #ifdef OBJECT_DETECT
@@ -87,6 +155,11 @@ static void setup_fsm()
 
     /* Setup initial state */
     g_fsm.set_init_state(state_normal);
+}
+
+static void process_fsm_state(const state_t & state)
+{
+
 }
 
 static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
@@ -113,50 +186,68 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
     float linear = g_linear_init;
     float angular = 0.0f;  
 
+#ifdef IMU
+#endif
+
     /*  Motion detect */
 #ifdef MOTION_DETECT
-    isMotion = (motion.detect(frame_front) > 0);    
-    std::cout << "Motion (Front) : " << bool2str(isMotion) << std::endl;
+    if (is_module_enable(MODULE_ID_MOTION)) {
+        bool isMotion = false;
+        if (motion.detect(frame_front) > 0) {
+            g_fsm.fire_event(event_normal_to_motion);
+            isMotion = true;
+        }
+        else {
+            g_fsm.fire_event(event_motion_to_normal);
+        }
+        std::cout << "Motion (Front) : " << bool2str(isMotion) << std::endl;
+    }
 #endif
     /*  Lane detect */
 #ifdef LANE_DETECT
-    lane.detect(frame_ground, frame_ground_hsv);
+    if (is_module_enable(MODULE_ID_LANE)) {
+        lane.detect(frame_ground, frame_ground_hsv);
+    }
 #endif
     /*  Moment detect */
 #ifdef MOMENT_DETECT
-    cv::Mat mask_ground;
-    cv::Mat frame_ground_hsv_masked;
-    int32_t moment_offset = 0;
-    float moment_offset_scale = 0;
+    if (is_module_enable(MODULE_ID_MOMENT)) {
+        cv::Mat mask_ground;
+        cv::Mat frame_ground_hsv_masked;
+        int32_t moment_offset = 0;
+        float moment_offset_scale = 0;
 
-    cv::inRange(frame_ground, lower_green, upper_green, mask_ground);
-    cv::bitwise_not(mask_ground, mask_ground);
-    frame_ground_hsv.copyTo(frame_ground_hsv_masked, mask_ground);
-    moment_offset = moment_white.detect(frame_ground, frame_ground_hsv_masked, cv::Rect(0, MOMENT_DETECT_Y, VIDEO_GROUND_WIDTH, MOMENT_DETECT_HEIGHT));
-    if (moment_offset) {
-        moment_offset_scale = normalize(moment_offset, VIDEO_GROUND_WIDTH >> 1);
-    
-        linear_moment = std::pow(moment_offset_scale + sign_float(moment_offset_scale) * 1.0f, -10);
-        angular_moment = -((float)moment_offset) * g_angular_scale; 
-    }
+        cv::inRange(frame_ground, lower_green, upper_green, mask_ground);
+        cv::bitwise_not(mask_ground, mask_ground);
+        frame_ground_hsv.copyTo(frame_ground_hsv_masked, mask_ground);
+        moment_offset = moment_white.detect(frame_ground, frame_ground_hsv_masked, cv::Rect(0, MOMENT_DETECT_Y, VIDEO_GROUND_WIDTH, MOMENT_DETECT_HEIGHT));
+        if (moment_offset) {
+            moment_offset_scale = normalize(moment_offset, VIDEO_GROUND_WIDTH >> 1);
+        
+            linear_moment = std::pow(moment_offset_scale + sign_float(moment_offset_scale) * 1.0f, -10);
+            angular_moment = -((float)moment_offset) * g_angular_scale; 
+        }
 #ifdef DEBUG_MOMENT_DETECT
-    std::cout << "Moment offset : " << moment_offset << "\tMoment offset scale : " << moment_offset_scale << "\tLinear moment : " << linear_moment << "\tAngular moment : " << angular_moment << std::endl;
-#endif        
+        std::cout << "Moment offset : " << moment_offset << "\tMoment offset scale : " << moment_offset_scale << "\tLinear moment : " << linear_moment << "\tAngular moment : " << angular_moment << std::endl;
+#endif
+    }
 #endif
     /*  Object detect */
 #ifdef OBJECT_DETECT
-    std::vector<cv::Rect> targets;
-    object.detect(frame_front, frame_front_gray, targets);
+    if (is_module_enable(MODULE_ID_OBJECT)) {
+        std::vector<cv::Rect> targets;
+        object.detect(frame_front, frame_front_gray, targets);
 #ifndef DEBUG_OBJECT_DETECT_REDCIRCLE
-    if (targets.size() > 0) {
+        if (targets.size() > 0) {
 #endif
-        int32_t traffic_light_count  = redcircle_find(frame_front, frame_front_hsv, targets);
-        if (traffic_light_count > 0) {
-            /// TODO : Trigget traffic light event
+            int32_t traffic_light_count  = redcircle_find(frame_front, frame_front_hsv, targets);
+            if (traffic_light_count > 0) {
+                /// TODO : Trigget traffic light event
+            }
+#ifndef DEBUG_OBJECT_DETECT_REDCIRCLE
         }
-#ifndef DEBUG_OBJECT_DETECT_REDCIRCLE
-    }
 #endif
+    }
 #endif
 
     /*  FSM */
@@ -169,7 +260,10 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
     linear *= linear_moment;
     angular = angular_moment;
 #endif
+    check_module_enable();
     std::cout << "Linear : " << linear << "\tAngular : " << angular << std::endl;
+    
+    process_fsm_state(g_fsm.peek());
 
 #ifdef ROS_ADAPTER
     ros_adapter::update(linear, angular);

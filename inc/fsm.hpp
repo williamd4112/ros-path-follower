@@ -141,15 +141,16 @@ void fsm<T>::update()
 #endif
     if (m_cur_event != FSM_INVALID) {
         event_t & event = m_event_table[m_cur_event];
-    
-        /* Check src */
-        assert(event.src == m_cur_state);
-
-        m_cur_state = event.dst;
+        if (event.src == m_cur_state) {
+            m_cur_state = event.dst;
+        }
     }
 #ifdef DEBUG_FSM
     std::cout << "FSM : " << pre_state << " -> " << m_cur_state << std::endl;
 #endif
+    
+    /*  Clear event */
+    m_cur_event = FSM_INVALID;
 }
 
 template <typename T>

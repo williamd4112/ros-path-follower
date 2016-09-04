@@ -25,7 +25,6 @@ typedef enum state_t
 state_id_t state_normal;
 #ifdef MOTION_DETECT
 state_id_t state_motion;
-state_id_t state_approaching;
 #endif
 #ifdef OBJECT_DETECT
 state_id_t state_traffic_light;
@@ -40,8 +39,6 @@ state_id_t state_road_not_found;
 /*  Event */
 #ifdef MOTION_DETECT
 event_id_t event_normal_to_motion;
-event_id_t event_motion_to_approaching;
-event_id_t event_approaching_to_motion;
 event_id_t event_motion_to_normal;
 #endif
 #ifdef OBJECT_DETECT
