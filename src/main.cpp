@@ -56,7 +56,7 @@
 
 #define normalize(offset, range) ((float)(offset) / (float)(range))
 
-/*	Config variables */
+/*  Config variables */
 static float g_linear_init = 0.1f;
 static float g_angular_scale = 0.0055f;
 static int g_green_range = 50;
@@ -240,9 +240,9 @@ static void run_ground()
 #else
 static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 {
-	/*	Ground mask (green)	*/
-	static cv::Scalar lower_green(60 - g_green_range, 100, 50);
-	static cv::Scalar upper_green(60 + g_green_range, 255, 255);
+    /*  Ground mask (green) */
+    static cv::Scalar lower_green(60 - g_green_range, 100, 50);
+    static cv::Scalar upper_green(60 + g_green_range, 255, 255);
 
     /* Frame pre-processing */
     videoframe_t frame_front_hsv;
@@ -263,8 +263,8 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
     // bool isSlope = false;
 
 #ifdef MOMENT_DETECT
-	float linear_moment = 1.0f;
-	float angular_moment = 0.0f;
+    float linear_moment = 1.0f;
+    float angular_moment = 0.0f;
 #endif
     float linear = g_linear_init;
     float angular = 0.0f;  
@@ -273,6 +273,7 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 #ifdef MOTION_DETECT
 #ifndef MOTION_DETECT_ASYNC
     isMotion = (motion.detect(frame_front) > 0);    
+    std::cout << "Motion (Front) : " << bool2str(isMotion) << std::endl;
 #endif
 #endif
     /*  Lane detect */
@@ -281,21 +282,21 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 #endif
     /*  Moment detect */
 #ifdef MOMENT_DETECT
-	cv::Mat mask_ground;
-	cv::Mat frame_ground_hsv_masked;
+    cv::Mat mask_ground;
+    cv::Mat frame_ground_hsv_masked;
     int32_t moment_offset = 0;
-	float moment_offset_scale = 0;
+    float moment_offset_scale = 0;
 
-	cv::inRange(frame_ground, lower_green, upper_green, mask_ground);
-	cv::bitwise_not(mask_ground, mask_ground);
-	frame_ground_hsv.copyTo(frame_ground_hsv_masked, mask_ground);
+    cv::inRange(frame_ground, lower_green, upper_green, mask_ground);
+    cv::bitwise_not(mask_ground, mask_ground);
+    frame_ground_hsv.copyTo(frame_ground_hsv_masked, mask_ground);
     moment_offset = moment_white.detect(frame_ground, frame_ground_hsv_masked, cv::Rect(0, MOMENT_DETECT_Y, VIDEO_GROUND_WIDTH, MOMENT_DETECT_HEIGHT));
-   	if (moment_offset) {
-		moment_offset_scale = normalize(moment_offset, VIDEO_GROUND_WIDTH >> 1);
-	
-		linear_moment = std::pow(moment_offset_scale + sign_float(moment_offset_scale) * 1.0f, -10);
-		angular_moment = -((float)moment_offset) * g_angular_scale; 
-	}
+    if (moment_offset) {
+        moment_offset_scale = normalize(moment_offset, VIDEO_GROUND_WIDTH >> 1);
+    
+        linear_moment = std::pow(moment_offset_scale + sign_float(moment_offset_scale) * 1.0f, -10);
+        angular_moment = -((float)moment_offset) * g_angular_scale; 
+    }
 #ifdef DEBUG_MOMENT_DETECT
     std::cout << "Moment offset : " << moment_offset << "\tMoment offset scale : " << moment_offset_scale << "\tLinear moment : " << linear_moment << "\tAngular moment : " << angular_moment << std::endl;
 #endif        
@@ -315,10 +316,13 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
     }
 #endif
 #endif
-	/*	FSM	*/
-	linear *= linear_moment;
-	angular = angular_moment;
-	std::cout << "Linear : " << linear << "\tAngular : " << angular << std::endl;
+    /*  FSM */
+    linear *= linear_moment;
+    angular = angular_moment;
+    if (isMotion) {
+        ros_adapter::move_back(0.5);
+    }
+    std::cout << "Linear : " << linear << "\tAngular : " << angular << std::endl;
 #ifdef ROS_ADAPTER
     ros_adapter::update(linear, angular);
 #endif

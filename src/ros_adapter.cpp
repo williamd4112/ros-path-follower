@@ -27,6 +27,14 @@ void ros_adapter::update(float linear, float angular)
 	g_publisher.publish(cmd_vel_msg);
 }
 
+void ros_adapter::move_back(float t, float linear, float angular)
+{
+	if (!t) return;
+	ros::Rate back_rate(1.0 / t);
+	update(linear, angular);
+	back_rate.sleep();
+}
+
 void ros_adapter::shutdown()
 {
 	ros::shutdown();
