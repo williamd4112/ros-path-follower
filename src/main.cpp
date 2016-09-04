@@ -2,140 +2,20 @@
 #include "util.hpp"
 #include "keyboard.h"
 
+#include "fsm.hpp"
+#include "fsm_def.hpp"
+
+#include "module_def.hpp"
+
 #include <thread>
-
-#ifdef GPU
-#define USE_GPU "GPU : On"
-#else
-#define USE_GPU "GPU : Off"
-#endif
-
-#ifdef ROS_ADAPTER
-#include "ros_adapter.h"
-#define USE_ROS_ADAPTER "ROS Adapter : On"
-#else
-#define USE_ROS_ADAPTER "ROS Adapter : Off"
-#endif
-
-#ifdef VIDEO_PIPELINE
-#include "video_stream.h"
-#define USE_VIDEO_PIPELINE "Video Pipeline : On"
-#else
-#define USE_VIDEO_PIPELINE "Video Pipeline : Off"
-#endif
-
-#ifdef MOTION_DETECT
-#include "motion.h"
-#define USE_MOTION_DETECT "Motion Detect : On"
-#else
-#define USE_MOTION_DETECT "Motion Detect : Off"
-
-#endif
-
-#ifdef LANE_DETECT
-#include "lane.hpp"
-#define USE_LANE_DETECT "Lane Detect : On"
-#else
-#define USE_LANE_DETECT "Lane Detect : Off"
-
-#endif
-
-#ifdef MOMENT_DETECT
-#include "moment.hpp"
-#define USE_MOMENT_DETECT "Moment Detect : On"
-#else
-#define USE_MOMENT_DETECT "Moment Detect : Off"
-#endif
-
-#ifdef OBJECT_DETECT
-#include "object.hpp"
-#define USE_OBJECT_DETECT "Object Detect : On"
-#else
-#define USE_OBJECT_DETECT "Object Detect : Off"
-#endif
-
-#define normalize(offset, range) ((float)(offset) / (float)(range))
 
 /*  Config variables */
 static float g_linear_init = 0.1f;
 static float g_angular_scale = 0.0055f;
 static int g_green_range = 50;
 
-#ifdef ASYNC
-#ifdef VIDEO_PIPELINE
-static videostream video_front;
-static videostream video_ground;
-#else
-static videosource_t video_front;
-static videosource_t video_ground;
-#endif
-#endif
-
-#ifdef MOTION_DETECT
-static motion_detector motion(50, 50, 1000);
-#endif
-
-#ifdef LANE_DETECT
-static lane_detector lane;
-#endif
-
-#ifdef MOMENT_DETECT
-static moment_detector moment_white;
-#endif
-
-#ifdef OBJECT_DETECT
-static object_haar_detector object(OBJECT_DETECT_TRAFFIC_LIGHT_CASCADE_FILE_PATH);
-
-static int32_t redcircle_find(const videoframe_t & frame, const videoframe_t & frame_hsv, std::vector<cv::Rect> & targets)
-{
-    int32_t ret = 0;
-
-    cv::Mat mask_low;
-    cv::inRange(frame_hsv, 
-        cv::Scalar(0, 100, 100),
-        cv::Scalar(10, 255, 255),
-        mask_low);  
-    cv::Mat mask_upper;
-    cv::inRange(frame_hsv, 
-        cv::Scalar(160, 100, 100),
-        cv::Scalar(179, 255, 255),
-        mask_upper);
-    cv::Mat mask;
-    cv::add(mask_low, mask_upper, mask);
-    cv::GaussianBlur(mask, mask, 
-        cv::Size(OBJECT_DETECT_REDCIRCLE_BLUR_SIZE, OBJECT_DETECT_REDCIRCLE_BLUR_SIZE), 0);
-
-#ifdef DEBUG_OBJECT_DETECT_REDCIRCLE
-    cv::Mat _frame;
-    cv::Mat _mask;
-    frame.copyTo(_frame);
-    mask.copyTo(_mask);
-#endif
-    for(cv::Rect & target : targets) {
-        std::vector<cv::Vec3f> circles;
-        cv::HoughCircles(mask(target), circles, CV_HOUGH_GRADIENT, 1, 
-            mask.rows / 8,
-            5, 20, 0, 1000);
-#ifdef DEBUG_OBJECT_DETECT_REDCIRCLE
-        for (cv::Vec3f circle : circles) {
-            cv::Point center(circle[0], circle[1]);
-            int r = circle[2];
-            cv::circle(_frame(target), center, r, cv::Scalar(0, 255, 0), 2);        
-        }
-#endif
-        if (circles.size() > 0) {
-            ret++;
-        }
-    }
-
-#ifdef DEBUG_OBJECT_DETECT_REDCIRCLE
-    cv::imshow("redcircle_find-mask", _mask);
-    cv::imshow("redcircle_find-frame", _frame);
-#endif
-
-    return ret;
-}
-#endif
+/*  Global variables */
+static fsm<state_t> g_fsm;
 
 static void self_check()
 {
@@ -148,96 +28,67 @@ static void self_check()
             << USE_OBJECT_DETECT << std::endl;
 }
 
-#ifdef ASYNC
-static void process_async_front(videoframe_t & frame)
+#ifdef DEBUG_FSM
+static void check_fsm_table()
 {
+    std::cout << "State " << state_normal << " : Normal" << std::endl;
 #ifdef MOTION_DETECT
-    motion.detect(frame);
-#endif  
+    std::cout << "State " << state_motion << " : Motion" << std::endl;
+    std::cout << "State " << state_approaching << " : Approaching" << std::endl;
+#endif
+#ifdef OBJECT_DETECT
+    std::cout << "State " << state_traffic_light << " : Traffic light" << std::endl;
+#endif
+#ifdef IMU
+    std::cout << "State " << state_seesaw_up << " : Seesaw up" << std::endl;
+    std::cout << "State " << state_seesaw_up << " : Seesaw down" << std::endl;
+    std::cout << "State " << state_seesaw_offset << " : Seesaw offset" << std::endl;
+#endif
+    std::cout << "State " << state_road_not_found << " : Road not found" << std::endl;
 }
+#endif
 
-static void process_async_ground(videoframe_t & frame)
+static void setup_fsm()
 {
-    videoframe_t frame_ground_hsv;
-    cv::cvtColor(frame, frame_ground_hsv, CV_BGR2HSV);
-#ifdef LANE_DETECT
-    lane.detect(frame, frame_ground_hsv);
+    /* Setup states */
+    state_normal = g_fsm.set_state(STATE_NORMAL);
+#ifdef MOTION_DETECT
+    state_motion = g_fsm.set_state(STATE_MOTION);
+    state_approaching = g_fsm.set_state(STATE_APPROACHING);
 #endif
+#ifdef OBJECT_DETECT
+    state_traffic_light = g_fsm.set_state(STATE_TRAFFIC_LIGHT);
+#endif
+#ifdef IMU
+    state_seesaw_up = g_fsm.set_state(STATE_SEESAW_UP);
+    state_seesaw_down = g_fsm.set_state(STATE_SEESAW_DOWN);
+    state_seesaw_offset = g_fsm.set_state(STATE_SEESAW_OFFSET);
+#endif
+    state_road_not_found = g_fsm.set_state(STATE_ROAD_NOT_FOUND);
+
+    /* Setup events */
+#ifdef MOTION_DETECT
+    event_normal_to_motion = g_fsm.set_event(state_normal, state_motion);
+    event_motion_to_approaching = g_fsm.set_event(state_motion, state_approaching);
+    event_approaching_to_motion = g_fsm.set_event(state_approaching, state_motion);
+    event_motion_to_normal = g_fsm.set_event(state_motion, state_normal);
+#endif
+#ifdef OBJECT_DETECT
+    event_normal_to_traffic_light = g_fsm.set_event(state_normal, state_traffic_light);
+    event_traffic_light_to_normal = g_fsm.set_event(state_traffic_light, state_normal);
+#endif
+#ifdef IMU
+    event_normal_to_seesaw_up = g_fsm.set_event(state_normal, state_seesaw_up);
+    event_seesaw_up_to_seesaw_down = g_fsm.set_event(state_seesaw_up, state_seesaw_down);
+    event_seesaw_down_to_seesaw_offset = g_fsm.set_event(state_seesaw_down, state_seesaw_offset);
+#endif
+    event_normal_to_road_not_found = g_fsm.set_event(state_normal, state_road_not_found);
+    event_road_not_found_to_normal = g_fsm.set_event(state_road_not_found, state_normal);
+
+    /* Setup initial state */
+    g_fsm.set_init_state(state_normal);
 }
 
-static void run_front()
-{
-    std::cout << "Front-Camera-Worker running on CPU " << sched_getcpu() << std::endl;
-    
-    videoframe_t frame_front;
-    for(;;) {
-        int key = keyboard::getKey();
-        if (key == KEYCODE_ESC) {
-            break;
-        }
-    
-#ifdef DEBUG_FPS            
-        double t = (double)cv::getTickCount();  
-#endif
-
-#ifdef VIDEO_PIPELINE
-        video_front.read(frame_front);
-#else
-        fetch_frame(video_front, frame_front);
-#endif
-        if (!frame_front.empty()) {
-            process_async_front(frame_front);
-#ifdef DEBUG_FPS
-            t = ((double)cv::getTickCount() - t)/cv::getTickFrequency();
-            std::cout << "FPS(Front) : " << (1.0 / t) << std::endl;
-#endif
-#ifdef DEBUG
-#ifdef DEBUG_MAIN
-            cv::imshow("frame-front", frame_front);
-#endif
-            cv::waitKey(1);
-#endif
-        }
-    }
-}
-
-static void run_ground()
-{
-    std::cout << "Ground-Camera-Worker running on CPU " << sched_getcpu() << std::endl;
-
-    videoframe_t frame_ground;
-    for(;;) {
-        int key = keyboard::getKey();
-        if (key == KEYCODE_ESC) {
-            break;
-        }
-    
-#ifdef DEBUG_FPS            
-        double t = (double)cv::getTickCount();  
-#endif
-
-#ifdef VIDEO_PIPELINE
-        video_ground.read(frame_ground);
-#else
-        fetch_frame(video_ground, frame_ground);
-#endif
-        if (!frame_ground.empty()) {
-            process_async_ground(frame_ground);
-#ifdef DEBUG_FPS
-            t = ((double)cv::getTickCount() - t)/cv::getTickFrequency();
-            std::cout << "FPS(Ground) : " << (1.0 / t) << std::endl;
-#endif
-#ifdef DEBUG
-#ifdef DEBUG_MAIN
-            cv::imshow("frame-ground", frame_ground);
-#endif
-            cv::waitKey(1);
-#endif
-        }
-    }
-}
-
-#else
 static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 {
     /*  Ground mask (green) */
@@ -255,13 +106,6 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
     cv::cvtColor(frame_front, frame_front_gray, CV_BGR2GRAY);
     cv::cvtColor(frame_ground, frame_ground_gray, CV_BGR2GRAY);
 
-    /* FSM Variable */
-    bool isTrafficLight = false;
-    bool isMotion = false;
-    // bool isApproaching = false;
-    // bool isCliff = false;
-    // bool isSlope = false;
-
 #ifdef MOMENT_DETECT
     float linear_moment = 1.0f;
     float angular_moment = 0.0f;
@@ -271,10 +115,8 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 
     /*  Motion detect */
 #ifdef MOTION_DETECT
-#ifndef MOTION_DETECT_ASYNC
     isMotion = (motion.detect(frame_front) > 0);    
     std::cout << "Motion (Front) : " << bool2str(isMotion) << std::endl;
-#endif
 #endif
     /*  Lane detect */
 #ifdef LANE_DETECT
@@ -310,29 +152,38 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 #endif
         int32_t traffic_light_count  = redcircle_find(frame_front, frame_front_hsv, targets);
         if (traffic_light_count > 0) {
-            isTrafficLight = true;
+            /// TODO : Trigget traffic light event
         }
 #ifndef DEBUG_OBJECT_DETECT_REDCIRCLE
     }
 #endif
 #endif
+
     /*  FSM */
+#ifdef DEBUG_FSM
+    check_fsm_table();
+#endif
+    g_fsm.update();
+
+#ifdef MOMENT_DETECT
     linear *= linear_moment;
     angular = angular_moment;
-    if (isMotion) {
-        ros_adapter::move_back(0.5);
-    }
+#endif
     std::cout << "Linear : " << linear << "\tAngular : " << angular << std::endl;
+
 #ifdef ROS_ADAPTER
     ros_adapter::update(linear, angular);
 #endif
 }
-#endif
 
 int main(int argc, char * argv[])
 {
+    /* Check module status */
     self_check();
     
+    /* Setup FSM */
+    setup_fsm();
+
 #ifdef ROS_ADAPTER
     ros_adapter::init(argc, argv);
 #endif
@@ -347,24 +198,6 @@ int main(int argc, char * argv[])
     
     std::cout << "Path-Follower running on CPU " << sched_getcpu() << std::endl;
 
-#ifdef ASYNC
-#ifdef VIDEO_PIPELINE   
-    video_front = videostream(front_cam_id, VIDEO_FRONT_WIDTH, VIDEO_FRONT_HEIGHT);
-    video_ground = videostream(ground_cam_id, VIDEO_GROUND_WIDTH, VIDEO_GROUND_HEIGHT);
-#else
-    video_front.open(front_cam_id);
-    video_front.set(CV_CAP_PROP_FRAME_WIDTH, VIDEO_FRONT_WIDTH);
-    video_front.set(CV_CAP_PROP_FRAME_HEIGHT, VIDEO_FRONT_HEIGHT);  
-
-    video_ground.open(ground_cam_id);
-    video_ground.set(CV_CAP_PROP_FRAME_WIDTH, VIDEO_GROUND_WIDTH);
-    video_ground.set(CV_CAP_PROP_FRAME_HEIGHT, VIDEO_GROUND_HEIGHT);    
-#endif
-    std::thread thread_front = std::thread(&run_front);
-    std::thread thread_ground = std::thread(&run_ground);
-    thread_front.join();
-    thread_ground.join();
-#else
 #ifdef VIDEO_PIPELINE   
     videostream video_front(front_cam_id, VIDEO_FRONT_WIDTH, VIDEO_FRONT_HEIGHT);
     videostream video_ground(ground_cam_id, VIDEO_GROUND_WIDTH, VIDEO_GROUND_HEIGHT);
@@ -413,7 +246,6 @@ int main(int argc, char * argv[])
         printf("\033[H\033[J");
     }
     cv::destroyAllWindows();
-#endif
 
 #ifdef ROS_ADAPTER
     ros_adapter::shutdown();

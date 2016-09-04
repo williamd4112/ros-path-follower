@@ -37,9 +37,6 @@
 #define MOTION_DETECT_ROI_PADDING 20
 #define MOMENT_DETECT_HEIGHT 50
 #define MOMENT_DETECT_Y (VIDEO_GROUND_HEIGHT * 3 / 4)
-#define OBJECT_DETECT_REDCIRCLE_BLUR_SIZE 3
-
-#define OBJECT_DETECT_TRAFFIC_LIGHT_CASCADE_FILE_PATH "data/traffic_light.xml"
 
 typedef cv::Mat videoframe_t;
 typedef cv::VideoCapture videosource_t;
@@ -64,9 +61,7 @@ typedef cv::Mat port_Mat;
 #define port_absdiff(src, dst, diff) cv::absdiff((src), (dst), (diff))
 #endif
 
-
 #define videosource_init(src, id) ((src).open((id)))
 #define fetch_frame(src, dst) ((src) >> (dst)) 
-
 
 #endif
