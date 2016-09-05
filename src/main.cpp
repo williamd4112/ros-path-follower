@@ -21,7 +21,7 @@ static fsm<state_t> g_fsm;
 
 /*  Module instance */
 #ifdef MOTION_DETECT
-motion_detector motion(50, 50, 1000);
+motion_detector motion(30, 50, 1000);
 #endif
 
 #ifdef LANE_DETECT
@@ -288,6 +288,10 @@ static void process_fsm_state(const state_t & state)
 
 static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 {
+#ifdef SMOOTH
+	static float last_linear = 0.0f;
+#endif
+
     /*  Ground mask (green) */
     static cv::Scalar lower_green(60 - g_green_range, 100, 50);
     static cv::Scalar upper_green(60 + g_green_range, 255, 255);
@@ -399,6 +403,7 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 				angular_object = 0.0f;
 				isTrafficLight = true;
 				g_fsm.fire_event(event_normal_to_traffic_light);
+				sleep(2);
             }
 #ifndef DEBUG_OBJECT_DETECT_REDCIRCLE
         }
@@ -436,7 +441,16 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
     process_fsm_state(g_fsm.peek());
 
 #ifdef ROS_ADAPTER
-    ros_adapter::update(linear, angular);
+#ifdef SMOOTH
+	float quant = 10.0f;
+	float linear_diff = linear - last_linear;
+	for (int i = 0; i < (int)quant; i++) {
+		ros_adapter::update(last_linear + linear_diff * (float)i / quant, angular);
+	}
+	last_linear = linear;
+#else
+	ros_adapter::update(linear_diff, angular);
+#endif
 #endif
 	if (is_diff) {
 		usleep(500);	
@@ -504,7 +518,7 @@ int main(int argc, char * argv[])
 #ifdef DEBUG
 #ifdef DEBUG_MAIN
             cv::imshow("frame-front", frame_front);
-            cv::imshow("frame-ground", frame_ground):
+            cv::imshow("frame-ground", frame_ground);
 #endif
             cv::waitKey(1);
 #endif

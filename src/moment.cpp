@@ -28,6 +28,7 @@ std::pair<int32_t, bool> moment_detector::detect(const videoframe_t & frame, con
 #endif
 	if (m.m00 > 0) {
 		center = cv::Point2f(m.m10/m.m00, m.m01/m.m00);	
+		isFound = true;
 	}	
 	
 #ifdef DEBUG_MOMENT_DETECT
@@ -42,10 +43,10 @@ std::pair<int32_t, bool> moment_detector::detect(const videoframe_t & frame, con
 	cv::circle(_frame_result, cv::Point2f(frame.cols / 2, roi.height / 2), 3, cv::Scalar(255, 0, 0, 3));
 	if (m.m00 > 0) {
 		cv::circle(_frame_result, center, 3, cv::Scalar(0, 0, 255), 3);
-		isFound = true;
 	}
 	cv::imshow("moment-mask", _mask);
 	cv::imshow("moment-frame_result", _frame_result);
 #endif
+	
 	return std::pair<int32_t, bool>(center.x - frame.cols / 2, isFound);
 }

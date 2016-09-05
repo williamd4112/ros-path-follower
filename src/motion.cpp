@@ -186,8 +186,8 @@ inline void motion_detector::ego_motion_compansate(const port_Mat & src, const p
 	m_blurFilter->apply(src_warp, src_warp);
 	m_blurFilter->apply(dst_masked, dst_masked);
 #else
-	cv::GaussianBlur(src_warp, src_warp, cv::Size(11, 11), 0);
-	cv::GaussianBlur(dst_masked, dst_masked, cv::Size(11, 11), 0);	
+	cv::GaussianBlur(src_warp, src_warp, cv::Size(31, 31), 0);
+	cv::GaussianBlur(dst_masked, dst_masked, cv::Size(31, 31), 0);	
 #endif
 	port_absdiff(src_warp, dst_masked, diff);
 	diff = diff(ROI);

@@ -71,7 +71,7 @@ void videostream::run()
 			continue;
 		}	
         m_mutex.lock();
-		if (m_buffer.size() < m_buffsize) {
+		if (m_buffer.size() < 4) {
         	m_buffer.push(videoframe_t(tmp.size(), tmp.type()));
        		tmp.copyTo(m_buffer.back());
 #ifdef DEBUG_PIPELINE
