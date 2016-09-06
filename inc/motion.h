@@ -10,7 +10,7 @@
 class motion_detector
 {
 public:
-	motion_detector(int32_t diff_ts=50, int32_t area_ts=50, int maxCorners=1000, double qualityLevel=0.01, double minDistance=0.0, int blockSize=3, bool useHarrisDetector=false, double harrisK=0.04, cv::Size winSize=cv::Size(31, 31), int maxLevel=5, int iters=10, bool useInitialFlow=false);
+	motion_detector(int32_t diff_ts=50, int32_t area_ts=50, int maxCorners=1000, double qualityLevel=0.01, double minDistance=0.0, int blockSize=9, bool useHarrisDetector=false, double harrisK=0.04, cv::Size winSize=cv::Size(31, 31), int maxLevel=5, int iters=10, bool useInitialFlow=false);
 	~motion_detector();
 
 	int32_t detect(const videoframe_t & frame);

@@ -85,7 +85,7 @@ motion_detector::motion_detector(int32_t diff_ts, int32_t area_ts, int maxCorner
 			harrisK);
  	m_pyrlk = cv::cuda::SparsePyrLKOpticalFlow::create(
                 winSize, maxLevel, iters);
-	m_blurFilter = cv::cuda::createGaussianFilter(CV_8U, CV_8U, cv::Size(21, 21), 0, 0, cv::BORDER_DEFAULT, -1);
+	m_blurFilter = cv::cuda::createGaussianFilter(CV_8U, CV_8U, cv::Size(31, 31), 0, 0, cv::BORDER_DEFAULT, -1);
 #endif
 
 }
@@ -131,8 +131,15 @@ int32_t motion_detector::detect(const videoframe_t & frame)
 		}
 		cv::imshow("motion_detector-motion_area", _cur_frame);
 #endif
-		cur_frame.copyTo(m_last_frame);
+		if (m_last_frame.empty()) {
+			cur_frame.copyTo(m_last_frame);
+		}
 		
+#ifdef GPU
+		cv::cuda::addWeighted(m_last_frame, 0.2, cur_frame, 0.8, 0, m_last_frame);
+#else
+		cv::addWeighted(m_last_frame, 0.2, cur_frame, 0.8, 0, m_last_frame);	
+#endif
 		if (rects.size() > 0) {
 			ret = 1;
 		}

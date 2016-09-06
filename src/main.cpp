@@ -21,7 +21,7 @@ static fsm<state_t> g_fsm;
 
 /*  Module instance */
 #ifdef MOTION_DETECT
-motion_detector motion(30, 50, 1000);
+motion_detector motion(35, 50, 1000);
 #endif
 
 #ifdef LANE_DETECT
@@ -96,6 +96,7 @@ static void self_check()
             << USE_LANE_DETECT << std::endl
             << USE_MOMENT_DETECT << std::endl
             << USE_OBJECT_DETECT << std::endl;
+	sleep(3);
 }
 
 static void check_module_enable()
@@ -306,7 +307,9 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
     videoframe_t frame_ground_gray;
     cv::cvtColor(frame_front, frame_front_gray, CV_BGR2GRAY);
     cv::cvtColor(frame_ground, frame_ground_gray, CV_BGR2GRAY);
-
+	
+	/*	Special purpose delay	*/
+	float delay = 0.0f;
 #ifdef MOTION_DETECT
 	float linear_motion = 0.0f;
 	float angular_motion = 0.0f;
@@ -371,11 +374,19 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
         
             linear_moment = std::pow(moment_offset_scale + sign_float(moment_offset_scale) * 1.0f, -6);
             angular_moment = -((float)moment_offset) * g_angular_scale; 
+			g_fsm.fire_event(event_road_not_found_to_normal);
+#ifdef DEBUG_MOMENT_DETECT
+			std::cout << "Road : found" << std::endl;
+#endif
         }
 		/*	Road not found */
 		else {
 			linear_moment = 0.0f;
 			angular_moment = 0.0f;
+			g_fsm.fire_event(event_normal_to_road_not_found);
+#ifdef DEBUG_MOMENT_DETECT
+			std::cout << "Road : not found" << std::endl;
+#endif
 		}
 #ifdef DEBUG_MOMENT_DETECT
         std::cout << "Moment offset : " << moment_offset 
@@ -398,12 +409,10 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 #endif
             int32_t traffic_light_count  = redcircle_find(frame_front, frame_front_hsv, targets);
             if (traffic_light_count > 0) {
-                /// TODO : Trigget traffic light event
 				linear_object = 0.0f;
 				angular_object = 0.0f;
 				isTrafficLight = true;
 				g_fsm.fire_event(event_normal_to_traffic_light);
-				sleep(2);
             }
 #ifndef DEBUG_OBJECT_DETECT_REDCIRCLE
         }
@@ -433,6 +442,10 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 	linear *= linear_object;
 	angular += angular_object;
 #endif
+	if (g_fsm.peek() == STATE_ROAD_NOT_FOUND) {
+		linear = -0.1f;
+		delay = 2.5f;
+	}
 
 #ifdef DEBUG
     check_module_enable();
@@ -442,18 +455,27 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 
 #ifdef ROS_ADAPTER
 #ifdef SMOOTH
-	float quant = 10.0f;
+	float quant = 100.0f;
 	float linear_diff = linear - last_linear;
 	for (int i = 0; i < (int)quant; i++) {
 		ros_adapter::update(last_linear + linear_diff * (float)i / quant, angular);
 	}
 	last_linear = linear;
 #else
-	ros_adapter::update(linear_diff, angular);
+	ros_adapter::update(linear, angular);
 #endif
 #endif
+	/*	State delay */
+	if (delay) {
+		sleep(delay);
+	}
+
+	/*	State transition time */
 	if (is_diff) {
-		usleep(500);	
+#ifdef DEBUG
+		std::cout << "State transition ..." << std::endl;
+#endif
+		usleep(1000);	
 	}
 }
 

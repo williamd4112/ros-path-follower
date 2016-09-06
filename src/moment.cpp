@@ -1,8 +1,8 @@
 #include "config.h"
 #include "moment.hpp"
 
-moment_detector::moment_detector(cv::Scalar lower, cv::Scalar upper): 
-	m_lower(lower), m_upper(upper)
+moment_detector::moment_detector(cv::Scalar lower, cv::Scalar upper, int32_t area_ts): 
+	m_lower(lower), m_upper(upper), m_area_ts(area_ts)
 {
 }
 
@@ -26,7 +26,7 @@ std::pair<int32_t, bool> moment_detector::detect(const videoframe_t & frame, con
 	mask = mask(roi);
 	m = cv::moments(mask);
 #endif
-	if (m.m00 > 0) {
+	if (m.m00 > m_area_ts) {
 		center = cv::Point2f(m.m10/m.m00, m.m01/m.m00);	
 		isFound = true;
 	}	

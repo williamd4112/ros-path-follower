@@ -128,9 +128,12 @@ void fsm<T>::fire_event(event_id_t eid)
     }
     
     /*  Preempt */
-    if (event.priority > m_event_table[m_cur_event].priority) {
+    if (m_cur_event == FSM_INVALID || event.priority > m_event_table[m_cur_event].priority) {
         m_cur_event = eid;
     }
+#ifdef DEBUG_FSM
+	std::cout << "Event : " << m_cur_event << std::endl;
+#endif
 }
 
 template <typename T>
