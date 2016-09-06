@@ -139,10 +139,8 @@ void fsm<T>::fire_event(event_id_t eid)
 template <typename T>
 bool fsm<T>::update()
 {
-#ifdef DEBUG_FSM
-    state_id_t pre_state;
-    pre_state = m_cur_state;
-#endif
+    state_id_t pre_state = m_cur_state;
+
     if (m_cur_event != FSM_INVALID) {
         event_t & event = m_event_table[m_cur_event];
         if (event.src == m_cur_state) {
