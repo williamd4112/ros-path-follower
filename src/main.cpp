@@ -8,6 +8,7 @@
 #include "module_def.hpp"
 
 #include <thread>
+#include <sys/time.h> 
 
 /*  Config variables */
 static float g_linear_init = 0.1f;
@@ -49,6 +50,10 @@ object_haar_detector object(OBJECT_DETECT_TRAFFIC_LIGHT_CASCADE_FILE_PATH);
 #define OFF false
 #define set_module(id, en) (g_module_enable[(id)] = (en))
 
+#define RED_LIGHT_TIMEOUT 20
+
+static int g_screenshot_cnt = 0;
+
 static const char * g_module_name[] = {
     "Motion",
     "Lane",
@@ -63,21 +68,25 @@ static bool g_module_enable[] = {
 #else
     false,
 #endif
+
 #ifdef LANE_DETECT
     true,
 #else
     false,
 #endif
+
 #ifdef MOMENT_DETECT
     true,
 #else
     false,
 #endif
+
 #ifdef OBJECT_DETECT
     true,
 #else
     false,
 #endif
+
 #ifdef IMU
     true
 #else
@@ -287,12 +296,12 @@ static void process_fsm_state(const state_t & state)
 	}
 }
 
-static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
+static void process(videoframe_t & frame_front, videoframe_t & frame_ground, double elapse_time)
 {
+	static double delay_cnt = 0.0;
 #ifdef SMOOTH
 	static float last_linear = 0.0f;
 #endif
-
     /*  Ground mask (green) */
     static cv::Scalar lower_green(60 - g_green_range, 100, 50);
     static cv::Scalar upper_green(60 + g_green_range, 255, 255);
@@ -324,6 +333,16 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 #endif
     float linear = g_linear_init;
     float angular = 0.0f;  
+
+	/* Delay counter */
+	if (delay_cnt > 0) {
+		std::cout << "Delay " << delay_cnt << std::endl;
+		delay_cnt -= elapse_time;
+		if (delay_cnt <= 0) {
+			delay_cnt= 0;
+		}
+		return;
+	}
 	
 	/*	IMU */
 #ifdef IMU
@@ -333,11 +352,14 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 #ifdef MOTION_DETECT
     if (is_module_enable(MODULE_ID_MOTION)) {
         bool isMotion = false;
-        if (motion.detect(frame_front) > 0) {
+        if (motion.detect(frame_ground, cv::Rect(MOTION_DETECT_ROI_PADDING, MOTION_DETECT_ROI_PADDING, 
+						VIDEO_GROUND_HEIGHT - MOTION_DETECT_ROI_PADDING, 
+						VIDEO_GROUND_HEIGHT - MOTION_DETECT_ROI_PADDING)) > 0) {
             g_fsm.fire_event(event_normal_to_motion);
             isMotion = true;
 			linear_motion = 0.0f;
 			angular_motion = 0.0f;
+			delay_cnt += 0.01;
         }
         else {
             g_fsm.fire_event(event_motion_to_normal);
@@ -399,27 +421,31 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
     /*  Object detect */
 #ifdef OBJECT_DETECT
     if (is_module_enable(MODULE_ID_OBJECT)) {
-		bool isTrafficLight = false;
+		bool isTrafficLight = false | (g_fsm.peek() == STATE_TRAFFIC_LIGHT);
         std::vector<cv::Rect> targets;
         object.detect(frame_front, frame_front_gray, targets);
 		linear_object = 1.0f;
 		angular_object = 0.0f;
-#ifndef DEBUG_OBJECT_DETECT_REDCIRCLE
         if (targets.size() > 0) {
-#endif
-            int32_t traffic_light_count  = redcircle_find(frame_front, frame_front_hsv, targets);
-            if (traffic_light_count > 0) {
+			int32_t traffic_light_count  = redcircle_find(frame_front, frame_front_hsv, targets);
+			if (traffic_light_count > 0) {
 				linear_object = 0.0f;
 				angular_object = 0.0f;
 				isTrafficLight = true;
+
 				g_fsm.fire_event(event_normal_to_traffic_light);
-            }
-#ifndef DEBUG_OBJECT_DETECT_REDCIRCLE
-        }
+
+#ifdef DEBUG_OBJECT_RECORD
+				char buff[100];
+				sprintf(buff, "object%d.jpg", g_screenshot_cnt++);
+				cv::imwrite(buff, frame_front);
 #endif
-		if (!isTrafficLight) {
-			g_fsm.fire_event(event_traffic_light_to_normal);
-		}
+			}
+			else if(greencircle_find(frame_front, frame_front_hsv, targets)){
+				g_fsm.fire_event(event_traffic_light_to_normal);			
+			}
+
+        }
 		std::cout << "Traffic Light : " << bool2str(isTrafficLight) << std::endl;
     }	
 #endif
@@ -444,7 +470,7 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 #endif
 	if (g_fsm.peek() == STATE_ROAD_NOT_FOUND) {
 		linear = -0.1f;
-		delay = 2.5f;
+		delay_cnt = 0.1;
 	}
 
 #ifdef DEBUG
@@ -465,18 +491,14 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground)
 	ros_adapter::update(linear, angular);
 #endif
 #endif
-	/*	State delay */
-	if (delay) {
-		sleep(delay);
-	}
-
 	/*	State transition time */
 	if (is_diff) {
 #ifdef DEBUG
 		std::cout << "State transition ..." << std::endl;
 #endif
-		usleep(1000);	
+		delay_cnt = 0.001;
 	}
+	std::cout << " Elapse : " << elapse_time << std::endl;
 }
 
 int main(int argc, char * argv[])
@@ -514,16 +536,19 @@ int main(int argc, char * argv[])
     video_ground.set(CV_CAP_PROP_FRAME_HEIGHT, VIDEO_GROUND_HEIGHT);
 #endif
 
+#ifdef VIDEO_PLAYBACK
+	cv::VideoWriter playback(argv[4],CV_FOURCC('M','J','P','G'), 10, cv::Size(VIDEO_FRONT_WIDTH, VIDEO_FRONT_HEIGHT),true);
+#endif
+
     videoframe_t frame_front, frame_ground;
+	double elapse = 0;
     for(;;) {
         int key = keyboard::getKey();
         if (key == KEYCODE_ESC) {
             break;
         }
     
-#ifdef DEBUG_FPS            
         double t = (double)cv::getTickCount();  
-#endif
 
 #ifdef VIDEO_PIPELINE
         video_front.read(frame_front); video_ground.read(frame_ground);
@@ -532,10 +557,13 @@ int main(int argc, char * argv[])
         fetch_frame(video_ground, frame_ground);
 #endif
         if (!frame_front.empty() && !frame_ground.empty()) {
-            process(frame_front, frame_ground);
+            process(frame_front, frame_ground, elapse);
+            elapse = ((double)cv::getTickCount() - t)/cv::getTickFrequency();
 #ifdef DEBUG_FPS
-            t = ((double)cv::getTickCount() - t)/cv::getTickFrequency();
-            std::cout << "FPS : " << (1.0 / t);
+            std::cout << "FPS : " << (1.0 / elapse);
+#endif
+#ifdef VIDEO_PLAYBACK
+		playback.write(frame_front);
 #endif
 #ifdef DEBUG
 #ifdef DEBUG_MAIN

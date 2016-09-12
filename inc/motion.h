@@ -13,7 +13,7 @@ public:
 	motion_detector(int32_t diff_ts=50, int32_t area_ts=50, int maxCorners=1000, double qualityLevel=0.01, double minDistance=0.0, int blockSize=9, bool useHarrisDetector=false, double harrisK=0.04, cv::Size winSize=cv::Size(31, 31), int maxLevel=5, int iters=10, bool useInitialFlow=false);
 	~motion_detector();
 
-	int32_t detect(const videoframe_t & frame);
+	int32_t detect(const videoframe_t & frame, const cv::Rect & roi);
 private:
 	int32_t m_diff_ts;
 	int32_t m_area_ts;
@@ -38,7 +38,7 @@ private:
 	port_Mat m_last_frame;	
 
 	inline void find_motion_area(const port_Mat & diff, std::vector<cv::Rect> & rects, int area_ts=100);
-	inline void ego_motion_compansate(const port_Mat & src, const port_Mat & dst, port_Mat & diff, int diff_ts=50);
+	inline void ego_motion_compansate(const port_Mat & src, const port_Mat & dst, port_Mat & diff, int diff_ts, const cv::Rect & roi);
 	inline void calculate_points_lk(const port_Mat & src, const port_Mat & dst, std::vector<cv::Point2f> & points0, std::vector<cv::Point2f> & points1, std::vector<uchar> & status);
 };
 

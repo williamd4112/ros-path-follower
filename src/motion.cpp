@@ -2,7 +2,7 @@
 
 #include "motion.h"
 
-static cv::Rect ROI(MOTION_DETECT_ROI_PADDING, MOTION_DETECT_ROI_PADDING, VIDEO_FRONT_WIDTH-MOTION_DETECT_ROI_PADDING, VIDEO_FRONT_HEIGHT-MOTION_DETECT_ROI_PADDING);
+//static cv::Rect ROI(MOTION_DETECT_ROI_PADDING, MOTION_DETECT_ROI_PADDING, VIDEO_FRONT_WIDTH-MOTION_DETECT_ROI_PADDING, VIDEO_FRONT_HEIGHT-MOTION_DETECT_ROI_PADDING);
 
 /**
   * GPU helper functions
@@ -95,7 +95,7 @@ motion_detector::~motion_detector()
 
 }
 
-int32_t motion_detector::detect(const videoframe_t & frame)
+int32_t motion_detector::detect(const videoframe_t & frame, const cv::Rect & roi)
 {
 	int32_t ret = 0;
 	if (m_last_frame.empty()) {
@@ -121,11 +121,11 @@ int32_t motion_detector::detect(const videoframe_t & frame)
 		port_cvtColor(cur_frame, cur_frame, CV_BGR2GRAY);
 		port_equalizeHist(cur_frame, cur_frame);
 
-		ego_motion_compansate(m_last_frame, cur_frame, diff, m_diff_ts); 
+		ego_motion_compansate(m_last_frame, cur_frame, diff, m_diff_ts, roi); 
 		find_motion_area(diff, rects, m_area_ts);
 
 #ifdef DEBUG_MOTION_DETECT_BOUNDING_BOX
-		_cur_frame = _cur_frame(ROI);
+		_cur_frame = _cur_frame(roi);
 		for (auto rect : rects) {
 			cv::rectangle(_cur_frame, rect.tl(), rect.br(), cv::Scalar(0, 255, 0), 2);	
 		}
@@ -174,7 +174,7 @@ inline void motion_detector::find_motion_area(const port_Mat & diff, std::vector
 #endif		
 }
 
-inline void motion_detector::ego_motion_compansate(const port_Mat & src, const port_Mat & dst, port_Mat & diff, int diff_ts)
+inline void motion_detector::ego_motion_compansate(const port_Mat & src, const port_Mat & dst, port_Mat & diff, int diff_ts, const cv::Rect & roi)
 {
 	std::vector<cv::Point2f> points[2];
 	std::vector<uchar> status;
@@ -197,7 +197,7 @@ inline void motion_detector::ego_motion_compansate(const port_Mat & src, const p
 	cv::GaussianBlur(dst_masked, dst_masked, cv::Size(31, 31), 0);	
 #endif
 	port_absdiff(src_warp, dst_masked, diff);
-	diff = diff(ROI);
+	diff = diff(roi);
 #ifdef DEBUG_MOTION_DETECT
 	cv::Mat _diff_no_thresh;
 #ifdef GPU_MOTION

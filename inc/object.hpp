@@ -14,7 +14,7 @@ public:
 		const videoframe_t & frame_gray,
 		std::vector<cv::Rect> & targets,
 		double scaleFactor=1.1, 
-		int minNeighbors=3,
+		int minNeighbors=9,
 		int flags=0, 
 		cv::Size minSize=cv::Size(15, 15),
 		cv::Size maxSize=cv::Size());
