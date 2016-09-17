@@ -35,8 +35,12 @@
 #define VIDEO_FRONT_WIDTH 160
 #define VIDEO_FRONT_HEIGHT 120
 #define MOTION_DETECT_ROI_PADDING 0
-#define MOMENT_DETECT_HEIGHT 50
-#define MOMENT_DETECT_Y (VIDEO_GROUND_HEIGHT * 3 / 4)
+
+#define MOMENT_DETECT_HEIGHT 100
+#define MOMENT_DETECT_Y (VIDEO_GROUND_HEIGHT * 3 / 8)
+
+#define BOUNCE_DETECT_HEIGHT 50
+#define BOUNCE_DETECT_Y (VIDEO_GROUND_HEIGHT * 3 / 4)
 
 typedef cv::Mat videoframe_t;
 typedef cv::VideoCapture videosource_t;

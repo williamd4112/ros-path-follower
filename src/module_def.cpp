@@ -20,7 +20,7 @@ static int32_t circle_find(const videoframe_t & frame, const videoframe_t & fram
         std::vector<cv::Vec3f> circles;
         cv::HoughCircles(mask(target), circles, CV_HOUGH_GRADIENT, 1, 
             mask(target).rows / 8,
-            20, 10, 2, 10000);
+            50, 10, 5, 10000);
 #ifdef DEBUG_OBJECT_DETECT_REDCIRCLE
         for (cv::Vec3f circle : circles) {
             cv::Point center(circle[0], circle[1]);
@@ -45,7 +45,7 @@ int32_t redcircle_find(const videoframe_t & frame, const videoframe_t & frame_hs
 {
     int32_t ret = 0;	
 	cv::Mat frame_hsv_median_blur;
-	cv::medianBlur(frame_hsv, frame_hsv_median_blur, 9);
+	cv::medianBlur(frame_hsv, frame_hsv_median_blur, 3);
 
     cv::Mat mask_low;
     cv::inRange(frame_hsv_median_blur, 
@@ -59,13 +59,13 @@ int32_t redcircle_find(const videoframe_t & frame, const videoframe_t & frame_hs
         mask_upper);
     
 
-    return circle_find(frame, frame_hsv, frame_hsv_median_blur, mask_low, mask_upper, targets, cv::Scalar(0, 0, 255));
+    return circle_find(frame, frame_hsv, frame_hsv_median_blur, mask_low, mask_upper, targets, cv::Scalar(0, 255, 255));
 }
 
 int32_t greencircle_find(const videoframe_t & frame, const videoframe_t & frame_hsv, std::vector<cv::Rect> & targets)
 {
     int32_t ret = 0;	
-	int32_t sensitivity = 10;
+	int32_t sensitivity = 45;
 
 	cv::Mat frame_hsv_median_blur;
 	cv::medianBlur(frame_hsv, frame_hsv_median_blur, 9);
@@ -76,7 +76,7 @@ int32_t greencircle_find(const videoframe_t & frame, const videoframe_t & frame_
         cv::Scalar(60 + sensitivity, 255, 255),
         mask_low);   
 
-    return circle_find(frame, frame_hsv, frame_hsv_median_blur, mask_low, mask_low, targets, cv::Scalar(0, 255, 0));
+    return circle_find(frame, frame_hsv, frame_hsv_median_blur, mask_low, mask_low, targets, cv::Scalar(255, 255, 0));
 }
 
 #endif

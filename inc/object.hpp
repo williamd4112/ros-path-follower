@@ -16,7 +16,7 @@ public:
 		double scaleFactor=1.1, 
 		int minNeighbors=9,
 		int flags=0, 
-		cv::Size minSize=cv::Size(15, 15),
+		cv::Size minSize=cv::Size(5, 5),
 		cv::Size maxSize=cv::Size());
 private:
 	cv::CascadeClassifier m_cascade;	

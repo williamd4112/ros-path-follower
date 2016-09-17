@@ -49,12 +49,19 @@
 #ifdef OBJECT_DETECT
 #include "object.hpp"
 #define USE_OBJECT_DETECT "Object Detect : On"
-#define OBJECT_DETECT_TRAFFIC_LIGHT_CASCADE_FILE_PATH "data/traffichor_v1.xml"
+#define OBJECT_DETECT_TRAFFIC_LIGHT_CASCADE_FILE_PATH "data/traffichor_v4.xml"
 #define OBJECT_DETECT_REDCIRCLE_BLUR_SIZE 3
 int32_t redcircle_find(const videoframe_t & frame, const videoframe_t & frame_hsv, std::vector<cv::Rect> & targets);
 int32_t greencircle_find(const videoframe_t & frame, const videoframe_t & frame_hsv, std::vector<cv::Rect> & targets);
 #else
 #define USE_OBJECT_DETECT "Object Detect : Off"
+#endif
+
+#ifdef BOUNCE_DETECT
+#include "bounce.hpp"
+#define USE_BOUNCE_DETECT "Bounce Detect : On"
+#else
+#define USE_BOUNCE_DETECT "Bounce Detect : Off"
 #endif
 
 #endif

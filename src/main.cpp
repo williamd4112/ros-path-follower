@@ -17,12 +17,16 @@ static float g_linear_slow_rate = -6.0f;
 
 static int g_green_range = 50;
 
+/*  Ground mask (green) */
+static cv::Scalar lower_green(60 - g_green_range, 100, 50);
+static cv::Scalar upper_green(60 + g_green_range, 255, 255);
+
 /*  Global variables */
 static fsm<state_t> g_fsm;
 
 /*  Module instance */
 #ifdef MOTION_DETECT
-motion_detector motion(35, 50, 1000);
+motion_detector motion(45, 50, 1000);
 #endif
 
 #ifdef LANE_DETECT
@@ -30,11 +34,15 @@ lane_detector lane;
 #endif
 
 #ifdef MOMENT_DETECT
-moment_detector moment_white;
+moment_detector moment_white(cv::Scalar(0, 0, 255-140), cv::Scalar(180, 80, 255), 2e6);
 #endif
 
 #ifdef OBJECT_DETECT
 object_haar_detector object(OBJECT_DETECT_TRAFFIC_LIGHT_CASCADE_FILE_PATH);
+#endif
+
+#ifdef BOUNCE_DETECT
+Bounce bounce(lower_green, upper_green, cv::Rect(0, BOUNCE_DETECT_Y, VIDEO_GROUND_WIDTH, BOUNCE_DETECT_HEIGHT));
 #endif
 
 #ifdef IMU
@@ -45,12 +53,13 @@ object_haar_detector object(OBJECT_DETECT_TRAFFIC_LIGHT_CASCADE_FILE_PATH);
 #define MODULE_ID_MOMENT 2
 #define MODULE_ID_OBJECT 3
 #define MODULE_ID_IMU 4
+#define MODULE_ID_BOUNCE 5
 #define is_module_enable(id) (g_module_enable[(id)])
 #define ON true
 #define OFF false
 #define set_module(id, en) (g_module_enable[(id)] = (en))
 
-#define RED_LIGHT_TIMEOUT 20
+#define RED_LIGHT_TIMEOUT 30
 
 static int g_screenshot_cnt = 0;
 
@@ -59,7 +68,8 @@ static const char * g_module_name[] = {
     "Lane",
     "Moment",
     "Object",
-    "IMU"
+    "IMU",
+	"Bounce"
 };
 
 static bool g_module_enable[] = {
@@ -88,9 +98,15 @@ static bool g_module_enable[] = {
 #endif
 
 #ifdef IMU
-    true
+    true,
 #else
-    false
+    false,
+#endif
+
+#ifdef BOUNCE
+	true
+#else
+	false
 #endif
 };
 
@@ -104,7 +120,8 @@ static void self_check()
             << USE_MOTION_DETECT << std::endl
             << USE_LANE_DETECT << std::endl
             << USE_MOMENT_DETECT << std::endl
-            << USE_OBJECT_DETECT << std::endl;
+            << USE_OBJECT_DETECT << std::endl
+			<< USE_BOUNCE_DETECT << std::endl;
 	sleep(3);
 }
 
@@ -191,6 +208,9 @@ static void process_fsm_state(const state_t & state)
 #ifdef IMU
 			set_module(MODULE_ID_IMU, ON);
 #endif
+#ifdef BOUNCE_DETECT
+			set_module(MODULE_ID_BOUNCE, ON);
+#endif
 			break;
 #ifdef MOTION_DETECT
 		case STATE_MOTION:
@@ -206,6 +226,9 @@ static void process_fsm_state(const state_t & state)
 #endif
 #ifdef IMU
 			set_module(MODULE_ID_IMU, OFF);
+#endif
+#ifdef BOUNCE_DETECT
+			set_module(MODULE_ID_BOUNCE, OFF);
 #endif
 			break;
 #endif
@@ -224,6 +247,10 @@ static void process_fsm_state(const state_t & state)
 #ifdef IMU
 			set_module(MODULE_ID_IMU, OFF);
 #endif
+#ifdef BOUNCE_DETECT
+			set_module(MODULE_ID_BOUNCE, OFF);
+#endif
+
 			break;
 #endif
 #ifdef IMU
@@ -241,6 +268,9 @@ static void process_fsm_state(const state_t & state)
 			set_module(MODULE_ID_OBJECT, OFF);
 #endif
 			set_module(MODULE_ID_IMU, ON);
+#ifdef BOUNCE_DETECT
+			set_module(MODULE_ID_BOUNCE, OFF);
+#endif
 			break;
 		case STATE_SEESAW_DOWN:
 #ifdef MOTION_DETECT
@@ -256,6 +286,9 @@ static void process_fsm_state(const state_t & state)
 			set_module(MODULE_ID_OBJECT, OFF);
 #endif
 			set_module(MODULE_ID_IMU, ON);
+#ifdef BOUNCE_DETECT
+			set_module(MODULE_ID_BOUNCE, OFF);
+#endif
 			break;
 		case STATE_SEESAW_OFFSET:
 #ifdef MOTION_DETECT
@@ -271,6 +304,9 @@ static void process_fsm_state(const state_t & state)
 			set_module(MODULE_ID_OBJECT, OFF);
 #endif
 			set_module(MODULE_ID_IMU, ON);
+#ifdef BOUNCE_DETECT
+			set_module(MODULE_ID_BOUNCE, OFF);
+#endif
 			break;
 #endif
 		case STATE_ROAD_NOT_FOUND:
@@ -289,6 +325,9 @@ static void process_fsm_state(const state_t & state)
 #ifdef IMU
 			set_module(MODULE_ID_IMU, OFF);
 #endif
+#ifdef BOUNCE_DETECT
+			set_module(MODULE_ID_BOUNCE, OFF);
+#endif
 			break;
 		default:
 			std::cout << "Unhandled state." << std::endl;
@@ -302,10 +341,6 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground, dou
 #ifdef SMOOTH
 	static float last_linear = 0.0f;
 #endif
-    /*  Ground mask (green) */
-    static cv::Scalar lower_green(60 - g_green_range, 100, 50);
-    static cv::Scalar upper_green(60 + g_green_range, 255, 255);
-
     /*	Frame pre-processing */
     videoframe_t frame_front_hsv;
     videoframe_t frame_ground_hsv;
@@ -330,6 +365,11 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground, dou
 #ifdef OBJECT_DETECT
 	float linear_object = 0.0f;
 	float angular_object = 0.0f;
+	double object_detect_delay = 0.0f;
+#endif
+#ifdef BOUNCE_DETECT
+	float linear_bounce = 0.0f;
+	float angular_bounce = 0.0f;
 #endif
     float linear = g_linear_init;
     float angular = 0.0f;  
@@ -344,10 +384,6 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground, dou
 		return;
 	}
 	
-	/*	IMU */
-#ifdef IMU
-#endif
-
     /*  Motion detect */
 #ifdef MOTION_DETECT
     if (is_module_enable(MODULE_ID_MOTION)) {
@@ -422,32 +458,70 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground, dou
 #ifdef OBJECT_DETECT
     if (is_module_enable(MODULE_ID_OBJECT)) {
 		bool isTrafficLight = false | (g_fsm.peek() == STATE_TRAFFIC_LIGHT);
-        std::vector<cv::Rect> targets;
+        
+		std::vector<cv::Rect> targets;
         object.detect(frame_front, frame_front_gray, targets);
 		linear_object = 1.0f;
 		angular_object = 0.0f;
-        if (targets.size() > 0) {
-			int32_t traffic_light_count  = redcircle_find(frame_front, frame_front_hsv, targets);
-			if (traffic_light_count > 0) {
-				linear_object = 0.0f;
-				angular_object = 0.0f;
-				isTrafficLight = true;
+		object_detect_delay -= elapse_time;		
 
-				g_fsm.fire_event(event_normal_to_traffic_light);
+        if (targets.size() > 0) {
+			switch(g_fsm.peek()) {
+				case STATE_TRAFFIC_LIGHT:
+					std::cout << "Find Green." << std::endl;
+					if (object_detect_delay <= 0 || greencircle_find(frame_front, frame_front_hsv, targets)) {
+						g_fsm.fire_event(event_traffic_light_to_normal);
+						isTrafficLight = false;
+						object_detect_delay = 0.0;
+#ifdef DEBUG_OBJECT_RECORD
+						char buff[100];
+						sprintf(buff, "object-g%d.jpg", g_screenshot_cnt++);
+						cv::imwrite(buff, frame_front);
+#endif
+					}
+					break;
+				default:
+				{
+					std::cout << "Find Red." << std::endl;
+					if (redcircle_find(frame_front, frame_front_hsv, targets)) {
+						linear_object = 0.0f;
+						angular_object = 0.0f;
+						isTrafficLight = true;
+						object_detect_delay = RED_LIGHT_TIMEOUT;
+						g_fsm.fire_event(event_normal_to_traffic_light);
 
 #ifdef DEBUG_OBJECT_RECORD
-				char buff[100];
-				sprintf(buff, "object%d.jpg", g_screenshot_cnt++);
-				cv::imwrite(buff, frame_front);
+						char buff[100];
+						sprintf(buff, "object-r%d.jpg", g_screenshot_cnt++);
+						cv::imwrite(buff, frame_front);
 #endif
+					}
+				}
+					break;
 			}
-			else if(greencircle_find(frame_front, frame_front_hsv, targets)){
-				g_fsm.fire_event(event_traffic_light_to_normal);			
-			}
-
         }
 		std::cout << "Traffic Light : " << bool2str(isTrafficLight) << std::endl;
     }	
+#endif
+	/* Bounce */
+#ifdef BOUNCE_DETECT
+	static cv::Point2i bounce_center(VIDEO_GROUND_WIDTH / 2, VIDEO_GROUND_HEIGHT / 2);
+	int32_t bounce_offset = 0;
+	float bounce_offset_scale = 0.0f;
+	linear_bounce = 1.0f;
+	angular_bounce = 0.0f;
+	if (is_module_enable(MODULE_ID_BOUNCE)) {
+		bounce_offset = bounce.detect(frame_ground, frame_ground_hsv, bounce_center, 200);
+		bounce_offset_scale = normalize(bounce_offset, VIDEO_GROUND_WIDTH >> 1);
+		
+		angular_bounce = -bounce_offset * std::pow(bounce_offset_scale + sign_float(bounce_offset_scale) * 1.0f, -2) * g_angular_scale;
+
+	}
+#ifdef DEBUG_BOUNCE
+	std::cout << "Bounce offset : " << bounce_offset << "\t"
+			<< "Bounce offset scale : " << bounce_offset_scale << "\t"
+			<< "Bounce angular bounce : " << angular_bounce << std::endl;
+#endif
 #endif
 
     /*  FSM */
@@ -468,8 +542,13 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground, dou
 	linear *= linear_object;
 	angular += angular_object;
 #endif
+#ifdef BOUNCE_DETECT
+	linear *= linear_bounce;
+	angular += angular_bounce;
+#endif
 	if (g_fsm.peek() == STATE_ROAD_NOT_FOUND) {
-		linear = -0.1f;
+		linear = 0.0f;
+		angular = -0.2f;
 		delay_cnt = 0.1;
 	}
 
@@ -480,23 +559,14 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground, dou
     process_fsm_state(g_fsm.peek());
 
 #ifdef ROS_ADAPTER
-#ifdef SMOOTH
-	float quant = 100.0f;
-	float linear_diff = linear - last_linear;
-	for (int i = 0; i < (int)quant; i++) {
-		ros_adapter::update(last_linear + linear_diff * (float)i / quant, angular);
-	}
-	last_linear = linear;
-#else
 	ros_adapter::update(linear, angular);
-#endif
 #endif
 	/*	State transition time */
 	if (is_diff) {
 #ifdef DEBUG
 		std::cout << "State transition ..." << std::endl;
 #endif
-		delay_cnt = 0.001;
+		delay_cnt = 0.0001;
 	}
 	std::cout << " Elapse : " << elapse_time << std::endl;
 }
@@ -515,7 +585,6 @@ int main(int argc, char * argv[])
 
     int ground_cam_id = atoi(argv[1]);
     int front_cam_id = atoi(argv[2]);
-    
     if (argc >= 4) {
         sscanf(argv[3], "%f", &g_linear_init);
         std::cout << "Init linear : " << g_linear_init << std::endl;
