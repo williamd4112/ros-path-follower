@@ -26,7 +26,7 @@ static fsm<state_t> g_fsm;
 
 /*  Module instance */
 #ifdef MOTION_DETECT
-motion_detector motion(45, 50, 1000);
+motion_detector motion(75, 50, 1000);
 #endif
 
 #ifdef LANE_DETECT
@@ -365,7 +365,7 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground, dou
 #ifdef OBJECT_DETECT
 	float linear_object = 0.0f;
 	float angular_object = 0.0f;
-	double object_detect_delay = 0.0f;
+	static double object_detect_delay = 0.0f;
 #endif
 #ifdef BOUNCE_DETECT
 	float linear_bounce = 0.0f;
@@ -463,43 +463,59 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground, dou
         object.detect(frame_front, frame_front_gray, targets);
 		linear_object = 1.0f;
 		angular_object = 0.0f;
-		object_detect_delay -= elapse_time;		
 
-        if (targets.size() > 0) {
-			switch(g_fsm.peek()) {
-				case STATE_TRAFFIC_LIGHT:
-					std::cout << "Find Green." << std::endl;
-					if (object_detect_delay <= 0 || greencircle_find(frame_front, frame_front_hsv, targets)) {
-						g_fsm.fire_event(event_traffic_light_to_normal);
-						isTrafficLight = false;
-						object_detect_delay = 0.0;
-#ifdef DEBUG_OBJECT_RECORD
-						char buff[100];
-						sprintf(buff, "object-g%d.jpg", g_screenshot_cnt++);
-						cv::imwrite(buff, frame_front);
-#endif
-					}
-					break;
-				default:
-				{
-					std::cout << "Find Red." << std::endl;
-					if (redcircle_find(frame_front, frame_front_hsv, targets)) {
-						linear_object = 0.0f;
-						angular_object = 0.0f;
-						isTrafficLight = true;
-						object_detect_delay = RED_LIGHT_TIMEOUT;
-						g_fsm.fire_event(event_normal_to_traffic_light);
+		std::cout << "Object detect timeout : " << object_detect_delay << std::endl;
+		bool isTablet = targets.size() > 0;
+		switch(g_fsm.peek()) {
+			case STATE_TRAFFIC_LIGHT:
+			{
+				object_detect_delay -= elapse_time;
 
-#ifdef DEBUG_OBJECT_RECORD
-						char buff[100];
-						sprintf(buff, "object-r%d.jpg", g_screenshot_cnt++);
-						cv::imwrite(buff, frame_front);
-#endif
-					}
+				bool isFoundGreen = false;
+				if (isTablet) {
+					isFoundGreen = (greencircle_find(frame_front, frame_front_hsv, targets) > 0);
 				}
-					break;
+
+				if (object_detect_delay <= 0 || isFoundGreen) {
+					g_fsm.fire_event(event_traffic_light_to_normal);
+					isTrafficLight = false;
+					object_detect_delay = 0.0;
+#ifdef DEBUG_OBJECT_RECORD
+					char buff[100];
+					sprintf(buff, "object-g%d.jpg", g_screenshot_cnt++);
+					cv::imwrite(buff, frame_front);
+#endif
+				}
+				else {
+					linear_object = 0.0f;
+					angular_object = 0.0f;
+				}
 			}
-        }
+				break;
+			default:
+			{
+				bool isFoundRed = false;
+				if (isTablet) {
+					isFoundRed = redcircle_find(frame_front, frame_front_hsv, targets);
+				}
+
+				if (isFoundRed) {
+					linear_object = 0.0f;
+					angular_object = 0.0f;
+					isTrafficLight = true;
+					object_detect_delay = RED_LIGHT_TIMEOUT;
+					g_fsm.fire_event(event_normal_to_traffic_light);
+
+#ifdef DEBUG_OBJECT_RECORD
+					char buff[100];
+					sprintf(buff, "object-r%d.jpg", g_screenshot_cnt++);
+					cv::imwrite(buff, frame_front);
+#endif
+				}
+			}
+				break;
+		}
+
 		std::cout << "Traffic Light : " << bool2str(isTrafficLight) << std::endl;
     }	
 #endif
@@ -514,7 +530,7 @@ static void process(videoframe_t & frame_front, videoframe_t & frame_ground, dou
 		bounce_offset = bounce.detect(frame_ground, frame_ground_hsv, bounce_center, 200);
 		bounce_offset_scale = normalize(bounce_offset, VIDEO_GROUND_WIDTH >> 1);
 		
-		angular_bounce = -bounce_offset * std::pow(bounce_offset_scale + sign_float(bounce_offset_scale) * 1.0f, -2) * g_angular_scale;
+		angular_bounce = -bounce_offset * std::pow(bounce_offset_scale + sign_float(bounce_offset_scale) * 1.0f, -4) * g_angular_scale;
 
 	}
 #ifdef DEBUG_BOUNCE

@@ -6,6 +6,7 @@
 moment_detector::moment_detector(cv::Scalar lower, cv::Scalar upper, int32_t area_ts, std::string debug_tag): 
 	m_lower(lower), m_upper(upper), m_area_ts(area_ts)
 {
+#ifdef DEBUG_MOMENT_DETECT
 	std::stringstream ss;
 	ss << debug_tag << "-mask";
 	m_debug_tag_mask = ss.str();
@@ -13,6 +14,7 @@ moment_detector::moment_detector(cv::Scalar lower, cv::Scalar upper, int32_t are
 	ss.clear();
 	ss << debug_tag << "-result";
 	m_debug_tag_result = ss.str();
+#endif
 }
 
 moment_detector::~moment_detector()

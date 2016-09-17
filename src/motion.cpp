@@ -196,8 +196,15 @@ inline void motion_detector::ego_motion_compansate(const port_Mat & src, const p
 	cv::GaussianBlur(src_warp, src_warp, cv::Size(31, 31), 0);
 	cv::GaussianBlur(dst_masked, dst_masked, cv::Size(31, 31), 0);	
 #endif
+
 	port_absdiff(src_warp, dst_masked, diff);
+#ifdef GPU_MOTION
+	//m_blurFilter->apply(diff, diff);
+#else
+	//cv::GaussianBlur(diff, diff, cv::Size(31, 31), 0);
+#endif
 	diff = diff(roi);
+
 #ifdef DEBUG_MOTION_DETECT
 	cv::Mat _diff_no_thresh;
 #ifdef GPU_MOTION
